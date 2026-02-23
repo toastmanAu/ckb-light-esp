@@ -710,17 +710,29 @@ int main(int argc, char *argv[]) {
             uint32_t lc_len = rf.length;
             offset += lc_len;
             printf("[proto] DATA len=%u raw: ", lc_len);
-            for (uint32_t i=0;i<lc_len&&i<16;i++) printf("%02x ",lc_data[i]); printf("\n");
-            if (lc_len < 4) continue;
-            uint32_t inner = ((uint32_t)lc_data[0]<<24)|((uint32_t)lc_data[1]<<16)|
-                             ((uint32_t)lc_data[2]<<8)|(uint32_t)lc_data[3];
-            lc_data += 4; lc_len = inner;
+            for (uint32_t i=0;i<lc_len&&i<20;i++) printf("%02x ",lc_data[i]); printf("\n");
+            /* Parse LengthDelimitedCodecWithCompress format:
+             * [BE32 = 1+msglen][flag_byte][msglen bytes]
+             * flag_byte: 0x00 = uncompressed, 0x80 = snappy compressed */
+            if (lc_len < 6) continue;  /* need at least 4+1+1 */
+            uint32_t framed_len = ((uint32_t)lc_data[0]<<24)|((uint32_t)lc_data[1]<<16)|
+                                  ((uint32_t)lc_data[2]<<8)|(uint32_t)lc_data[3];
+            lc_data += 4; lc_len = framed_len;
+            uint8_t flag = lc_data[0];
+            lc_data += 1; lc_len -= 1;  /* skip flag byte */
+            if (flag & 0x80) {
+                printf("[proto] WARNING: snappy-compressed data (flag=0x%02x), skipping\n", flag);
+                continue;
+            }
+            /* Now lc_data points to raw LightClientMessage bytes, lc_len = msglen */
             uint8_t mid; const uint8_t *mpay; uint32_t mplen;
-            if (lc_msg_unwrap(lc_data, lc_len, &mid, &mpay, &mplen) == 0) {
+            if (lc_msg_unwrap(lc_data, lc_len, &mid, &mpay, &mplen) > 0) {
                 printf("[proto] msg_id=0x%02x payload=%u bytes\n", mid, mplen);
                 if (mid == MSG_SEND_LAST_STATE) {
                     msg_send_last_state_t sls;
-                    if (msg_send_last_state_decode(mpay, mplen, &sls) == 0) {
+                    int dec_rc = msg_send_last_state_decode(mpay, mplen, &sls);
+                    printf("[proto] msg_send_last_state_decode rc=%d\n", dec_rc);
+                    if (dec_rc > 0) {
                         printf("\n[proto] *** SendLastState received! ***\n");
                         printf("[proto]   block_number   = %llu\n",
                                (unsigned long long)sls.last_header.header.number);
