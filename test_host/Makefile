@@ -15,9 +15,12 @@ SRCS_TRANSPORT = \
     ../components/ckb_transport/src/ckb_yamux.c    \
     ../components/ckb_transport/src/ckb_secio.c
 
+SRCS_PROTOCOL = \
+    ../components/ckb_protocol/src/ckb_protocol.c
+
 .PHONY: all clean test
 
-all: test_blake2b test_mmr test_transport
+all: test_blake2b test_mmr test_transport test_protocol
 
 test_blake2b: test_blake2b.c $(SRCS_CORE)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
@@ -27,6 +30,11 @@ test_mmr: test_mmr.c $(SRCS_CORE)
 
 test_transport: test_transport.c $(SRCS_CORE) $(SRCS_TRANSPORT)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test_protocol: test_protocol.c $(SRCS_CORE) $(SRCS_TRANSPORT) $(SRCS_PROTOCOL)
+	$(CC) $(CFLAGS) \
+	    -I../components/ckb_protocol/include \
+	    -o $@ $^ $(LDFLAGS)
 
 test: all
 	@echo ""
@@ -38,6 +46,9 @@ test: all
 	@echo ""
 	@echo ">>> Running Transport tests..."
 	@./test_transport
+	@echo ""
+	@echo ">>> Running Protocol tests..."
+	@./test_protocol
 
 clean:
-	rm -f test_blake2b test_mmr test_transport *.o
+	rm -f test_blake2b test_mmr test_transport test_protocol *.o
