@@ -45,7 +45,7 @@ static void test_mol_bytes_roundtrip(void) {
 
     /* Check header */
     uint32_t hdr = mol_read_u32(buf);
-    ASSERT_INT("mol_bytes header = 10", (int)hdr, 10);
+    ASSERT_INT("mol_bytes header = 10", (int)hdr, 6);  /* header = data_len only */
 
     /* Decode */
     const uint8_t *out; uint32_t out_len;
@@ -60,7 +60,7 @@ static void test_mol_empty_bytes(void) {
     int written = mol_encode_bytes(NULL, 0, buf, sizeof(buf));
     ASSERT_INT("mol_encode empty bytes = 4", written, 4);
     uint32_t hdr = mol_read_u32(buf);
-    ASSERT_INT("mol_empty header = 4", (int)hdr, 4);
+    ASSERT_INT("mol_empty header = 4", (int)hdr, 0);  /* header = data_len = 0 for empty */
     const uint8_t *out; uint32_t out_len;
     mol_decode_bytes(buf, 4, &out, &out_len);
     ASSERT_INT("mol_decode empty len = 0", (int)out_len, 0);
@@ -77,17 +77,17 @@ static void test_mol_table_roundtrip(void) {
     t.field_data[1] = f1; t.field_len[1] = 3;
     t.field_data[2] = f2; t.field_len[2] = 1;
 
-    uint32_t expected_size = 4 + 4 + 3*4 + 2 + 3 + 1; /* = 26 */
+    uint32_t expected_size = 4 + 3*4 + 2 + 3 + 1; /* = 22: total(4) + offsets(12) + data(6) */
     ASSERT_INT("mol_table_encoded_size", (int)mol_table_encoded_size(&t), (int)expected_size);
 
     uint8_t buf[64];
     int written = mol_table_encode(&t, buf, sizeof(buf));
-    ASSERT_INT("mol_table_encode returns 26", written, (int)expected_size);
+    ASSERT_INT("mol_table_encode returns 22", written, (int)expected_size);
 
     /* Decode back */
     mol_table_t t2;
     int consumed = mol_table_decode(buf, (uint32_t)written, &t2);
-    ASSERT_INT("mol_table_decode consumed 26", consumed, (int)expected_size);
+    ASSERT_INT("mol_table_decode consumed 22", consumed, (int)expected_size);
     ASSERT_INT("mol_table field_count = 3", (int)t2.field_count, 3);
     ASSERT_INT("mol_table f0 len = 2", (int)t2.field_len[0], 2);
     ASSERT_INT("mol_table f1 len = 3", (int)t2.field_len[1], 3);

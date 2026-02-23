@@ -41,8 +41,8 @@ extern "C" {
 
 /* AES-128-CTR key + IV sizes */
 #define SECIO_KEY_SIZE    16
-#define SECIO_IV_SIZE     16
-#define SECIO_HMAC_SIZE   20  /* HMAC-SHA256 truncated to 20 bytes */
+#define SECIO_IV_SIZE     12    /* GCM uses 96-bit (12-byte) nonce */
+#define SECIO_HMAC_SIZE   0     /* AES-GCM is AEAD — no separate MAC key */
 #define SECIO_NONCE_SIZE  16
 
 /* Stretched key material per direction */

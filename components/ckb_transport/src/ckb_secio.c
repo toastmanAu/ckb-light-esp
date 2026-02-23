@@ -8,11 +8,12 @@
 #include "ckb_secio.h"
 #include "ckb_molecule.h"
 #include <string.h>
+#include <stdio.h>
 
 /* Preferred algorithms — what we offer (CKB nodes accept these) */
 #define SECIO_OFFER_EXCHANGES  "P-256"
-#define SECIO_OFFER_CIPHERS    "AES-128"
-#define SECIO_OFFER_HASHES     "SHA-256"
+#define SECIO_OFFER_CIPHERS    "AES-128-GCM"
+#define SECIO_OFFER_HASHES     "SHA256"
 
 /* Big-endian 4-byte helpers */
 static inline uint32_t read_u32_be(const uint8_t *p) {
@@ -160,24 +161,13 @@ int secio_process_propose(secio_ctx_t *ctx, const uint8_t *buf, uint32_t buf_len
 
 int secio_ordering(const secio_ctx_t *ctx) {
     /*
-     * Ordering is determined by comparing:
-     *   SHA256(remote_pubkey || local_nonce)  vs  SHA256(local_pubkey || remote_nonce)
-     * If local > remote, we are "higher" and use the first half of stretched keys.
-     * In practice for the key-split, the side with higher ordering gets keys[0..n/2],
-     * the lower side gets keys[n/2..n].
-     *
-     * Without SHA256 available here (no crypto callbacks), we do a simple lexicographic
-     * comparison of (pubkey XOR nonce) as a deterministic ordering.
-     * The actual implementation uses crypto->sha256 — this is called from secio_process_exchange.
+     * Ordering per Tentacle:
+     *   compare SHA256(remote_pubkey || local_nonce)
+     *        vs SHA256(local_pubkey  || remote_nonce)
+     * We need crypto callbacks here — stored result is set during process_exchange.
+     * This function just returns the cached result.
      */
-    int i;
-    for (i = 0; i < 16; i++) {
-        uint8_t local_v  = ctx->local_static_pubkey[i]  ^ ctx->local_nonce[i];
-        uint8_t remote_v = ctx->remote_static_pubkey[i] ^ ctx->remote_nonce[i];
-        if (local_v > remote_v) return 1;
-        if (local_v < remote_v) return 0;
-    }
-    return 0;
+    return ctx->we_are_higher;
 }
 
 /* ── Step 3: Build Exchange ── */
@@ -237,20 +227,16 @@ int secio_stretch_keys(const secio_crypto_t *crypto,
 
     /*
      * Key stretching per Tentacle/SecIO:
-     * seed = HMAC-SHA256(key_material, "")
-     * Generate 2*(iv_size + key_size + mac_size) bytes by repeated HMAC:
-     *   a_1 = HMAC(key_material, seed)
-     *   a_2 = HMAC(key_material, a_1)
-     *   output_1 = HMAC(key_material, a_1 || seed)
-     *   output_2 = HMAC(key_material, a_2 || seed)
-     *   ...
-     * Split output in half for k1 (local if higher) and k2 (remote if lower).
+     * Total needed: 2 * (iv_size + key_size + 20) = 2 * (12 + 16 + 20) = 96 bytes
+     * The 20-byte MAC key slot exists even for AEAD ciphers (it's discarded by
+     * generate_stream_cipher_and_hmac but must be included in the stretch so the
+     * half-split lands at the right offsets).
      *
-     * Total needed: 2 * (16 + 16 + 20) = 104 bytes
+     * Per-half layout: [12-byte iv (discarded)][16-byte cipher key][20-byte mac key (discarded)]
      */
     const uint8_t seed[] = "key expansion";
     const size_t  seed_len = 13;
-    const size_t  need = 2 * (SECIO_IV_SIZE + SECIO_KEY_SIZE + SECIO_HMAC_SIZE);
+    const size_t  need = 2 * (SECIO_IV_SIZE + SECIO_KEY_SIZE + 20);  /* 96 bytes */
 
     uint8_t longer[256];
     uint8_t a[32], b[32];
@@ -278,13 +264,11 @@ int secio_stretch_keys(const secio_crypto_t *crypto,
     const uint8_t *h1 = longer;
     const uint8_t *h2 = longer + need / 2;
 
-    memcpy(k1->iv,      h1,                           SECIO_IV_SIZE);
-    memcpy(k1->key,     h1 + SECIO_IV_SIZE,           SECIO_KEY_SIZE);
-    memcpy(k1->mac_key, h1 + SECIO_IV_SIZE + SECIO_KEY_SIZE, SECIO_HMAC_SIZE);
+    memcpy(k1->iv,  h1,                 SECIO_IV_SIZE);
+    memcpy(k1->key, h1 + SECIO_IV_SIZE, SECIO_KEY_SIZE);
 
-    memcpy(k2->iv,      h2,                           SECIO_IV_SIZE);
-    memcpy(k2->key,     h2 + SECIO_IV_SIZE,           SECIO_KEY_SIZE);
-    memcpy(k2->mac_key, h2 + SECIO_IV_SIZE + SECIO_KEY_SIZE, SECIO_HMAC_SIZE);
+    memcpy(k2->iv,  h2,                 SECIO_IV_SIZE);
+    memcpy(k2->key, h2 + SECIO_IV_SIZE, SECIO_KEY_SIZE);
 
     return 0;
 }
@@ -328,9 +312,34 @@ int secio_process_exchange(secio_ctx_t *ctx, const secio_crypto_t *crypto,
         ctx->state = SECIO_STATE_FAILED;
         return -1;
     }
+    for (int _i=0;_i<8;_i++) fprintf(stderr,"%02x",shared_secret[_i]);
+    fprintf(stderr,"...\n");
 
-    /* Determine ordering for key assignment */
-    ctx->we_are_higher = secio_ordering(ctx);
+    /* Determine ordering for key assignment via SHA256:
+     * local_hash  = SHA256(remote_pubkey || local_nonce)
+     * remote_hash = SHA256(local_pubkey  || remote_nonce)
+     * we_are_higher = (local_hash > remote_hash) lexicographically
+     */
+    {
+        uint8_t local_buf[65 + 16];
+        uint8_t remote_buf[65 + 16];
+        uint8_t local_hash[32], remote_hash[32];
+
+        uint32_t rpk_len = ctx->remote_static_pubkey_len;
+        memcpy(local_buf, ctx->remote_static_pubkey, rpk_len);
+        memcpy(local_buf + rpk_len, ctx->local_nonce, 16);
+        if (crypto->sha256(local_buf, rpk_len + 16, local_hash) < 0) {
+            ctx->state = SECIO_STATE_FAILED; return -1;
+        }
+
+        memcpy(remote_buf, ctx->local_static_pubkey, 33);
+        memcpy(remote_buf + 33, ctx->remote_nonce, 16);
+        if (crypto->sha256(remote_buf, 33 + 16, remote_hash) < 0) {
+            ctx->state = SECIO_STATE_FAILED; return -1;
+        }
+
+        ctx->we_are_higher = (memcmp(remote_hash, local_hash, 32) > 0) ? 1 : 0;
+    }
 
     /* Stretch keys */
     secio_key_set_t k1, k2;
@@ -340,14 +349,24 @@ int secio_process_exchange(secio_ctx_t *ctx, const secio_crypto_t *crypto,
         return -1;
     }
 
-    /* Assign: higher peer gets k1 for local, k2 for remote */
+    /* Assign keys per Tentacle:
+     * Note: "local_key" here means the key this peer uses for LOCAL encrypt (outbound).
+     * The node's encode_cipher uses the same half as our decode key.
+     * After empirical verification: when we_are_higher, node uses k1 to encrypt to us,
+     * so we use k1 as remote_keys (for decryption). k2 for local (encryption).
+     * When NOT higher: k2 is what node encrypts with → our remote; k1 for our local.
+     */
     if (ctx->we_are_higher) {
-        ctx->local_keys  = k1;
-        ctx->remote_keys = k2;
-    } else {
         ctx->local_keys  = k2;
         ctx->remote_keys = k1;
+    } else {
+        ctx->local_keys  = k1;
+        ctx->remote_keys = k2;
     }
+    for (int _i=0;_i<8;_i++) fprintf(stderr,"%02x",ctx->local_keys.key[_i]);
+    fprintf(stderr,"... remote_key: ");
+    for (int _i=0;_i<8;_i++) fprintf(stderr,"%02x",ctx->remote_keys.key[_i]);
+    fprintf(stderr,"...\n");
 
     /* Clear sensitive material */
     memset(shared_secret, 0, sizeof(shared_secret));

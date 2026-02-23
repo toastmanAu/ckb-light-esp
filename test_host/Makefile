@@ -5,6 +5,14 @@ CFLAGS  = -Wall -Wextra -std=c99 -g \
            -DPOSIX_TEST
 LDFLAGS = -lm
 
+# Phase 4: live connection (needs OpenSSL + libsecp256k1)
+CFLAGS_LIVE = $(CFLAGS) \
+              -I../components/ckb_protocol/include \
+              -Wno-deprecated-declarations \
+              $(shell pkg-config --cflags openssl 2>/dev/null) \
+              $(shell pkg-config --cflags libsecp256k1 2>/dev/null || echo "-I/usr/include")
+LDFLAGS_LIVE = $(LDFLAGS) -lssl -lcrypto -lsecp256k1
+
 SRCS_CORE = \
     ../components/ckb_core/src/ckb_blake2b.c \
     ../components/ckb_core/src/ckb_types.c   \
@@ -18,7 +26,7 @@ SRCS_TRANSPORT = \
 SRCS_PROTOCOL = \
     ../components/ckb_protocol/src/ckb_protocol.c
 
-.PHONY: all clean test
+.PHONY: all clean test live
 
 all: test_blake2b test_mmr test_transport test_protocol
 
@@ -36,6 +44,14 @@ test_protocol: test_protocol.c $(SRCS_CORE) $(SRCS_TRANSPORT) $(SRCS_PROTOCOL)
 	    -I../components/ckb_protocol/include \
 	    -o $@ $^ $(LDFLAGS)
 
+connect_live: connect_live.c crypto_openssl.c $(SRCS_CORE) $(SRCS_TRANSPORT) $(SRCS_PROTOCOL)
+	$(CC) $(CFLAGS_LIVE) -o $@ $^ $(LDFLAGS_LIVE)
+
+live: connect_live
+	@echo ""
+	@echo ">>> Connecting to CKB node..."
+	@./connect_live
+
 test: all
 	@echo ""
 	@echo ">>> Running Blake2b tests..."
@@ -51,4 +67,4 @@ test: all
 	@./test_protocol
 
 clean:
-	rm -f test_blake2b test_mmr test_transport test_protocol *.o
+	rm -f test_blake2b test_mmr test_transport test_protocol connect_live *.o

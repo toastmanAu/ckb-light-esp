@@ -3,6 +3,7 @@
  */
 
 #include "ckb_molecule.h"
+#include <stdio.h>
 #include <string.h>
 
 /* ── Bytes ── */
@@ -11,7 +12,7 @@ int mol_encode_bytes(const uint8_t *data, uint32_t data_len,
                      uint8_t *buf, uint32_t buf_size) {
     uint32_t total = 4 + data_len;
     if (!buf || buf_size < total) return -1;
-    mol_write_u32(buf, total);
+    mol_write_u32(buf, data_len);   /* Molecule Bytes: header = data length only */
     if (data && data_len) memcpy(buf + 4, data, data_len);
     return (int)total;
 }
@@ -19,19 +20,19 @@ int mol_encode_bytes(const uint8_t *data, uint32_t data_len,
 int mol_decode_bytes(const uint8_t *buf, uint32_t buf_size,
                      const uint8_t **data_out, uint32_t *len_out) {
     if (!buf || buf_size < 4) return -1;
-    uint32_t total = mol_read_u32(buf);
-    if (total < 4 || total > buf_size) return -1;
+    uint32_t data_len = mol_read_u32(buf);  /* header = data length only */
+    if (4 + data_len > buf_size) return -1;
     if (data_out) *data_out = buf + 4;
-    if (len_out)  *len_out  = total - 4;
-    return (int)total;
+    if (len_out)  *len_out  = data_len;
+    return (int)(4 + data_len);
 }
 
 /* ── Table ── */
 
 uint32_t mol_table_encoded_size(const mol_table_t *t) {
     if (!t) return 0;
-    /* full_size(4) + field_count(4) + offsets(4 * field_count) + all field data */
-    uint32_t header = 4 + 4 + 4 * t->field_count;
+    /* full_size(4) + offsets(4 * field_count) + all field data */
+    uint32_t header = 4 + 4 * t->field_count;
     uint32_t data_size = 0;
     uint32_t i;
     for (i = 0; i < t->field_count; i++)
@@ -44,16 +45,16 @@ int mol_table_encode(const mol_table_t *t, uint8_t *buf, uint32_t buf_size) {
     uint32_t total = mol_table_encoded_size(t);
     if (buf_size < total) return -1;
 
-    uint32_t header_size = 4 + 4 + 4 * t->field_count;
+    /* Molecule Table: [4-byte total_size][offset_0]...[offset_n-1][fields...] */
+    uint32_t header_size = 4 + 4 * t->field_count;
 
     mol_write_u32(buf, total);
-    mol_write_u32(buf + 4, t->field_count);
 
     /* Write offsets: offset of each field relative to start of table */
     uint32_t offset = header_size;
     uint32_t i;
     for (i = 0; i < t->field_count; i++) {
-        mol_write_u32(buf + 8 + 4 * i, offset);
+        mol_write_u32(buf + 4 + 4 * i, offset);
         offset += t->field_len[i];
     }
 
@@ -72,22 +73,36 @@ int mol_table_decode(const uint8_t *buf, uint32_t buf_size, mol_table_t *t) {
     if (!buf || !t || buf_size < 8) return -1;
 
     uint32_t full_size = mol_read_u32(buf);
-    if (full_size > buf_size || full_size < 8) return -1;
+    if (full_size > buf_size || full_size < 4) return -1;
 
-    uint32_t field_count = mol_read_u32(buf + 4);
+    /* Molecule Table: [4-byte total_size][offset_0][offset_1]...[offset_n-1]
+     * Field count derived from first offset: n = (offset_0 - 4) / 4
+     * If full_size == 4, table is empty (0 fields).
+     */
+    if (full_size == 4) {
+        t->field_count = 0;
+        return (int)full_size;
+    }
+    if (full_size < 8) return -1;
+
+    uint32_t first_offset = mol_read_u32(buf + 4);
+    if (first_offset < 4 || first_offset > full_size) return -1;
+    if ((first_offset - 4) % 4 != 0) return -1;
+
+    uint32_t field_count = (first_offset - 4) / 4;
     if (field_count > MOL_MAX_FIELDS) return -1;
 
-    uint32_t header_size = 4 + 4 + 4 * field_count;
+    uint32_t header_size = 4 + 4 * field_count;
     if (full_size < header_size) return -1;
 
     t->field_count = field_count;
 
     uint32_t i;
     for (i = 0; i < field_count; i++) {
-        uint32_t offset = mol_read_u32(buf + 8 + 4 * i);
+        uint32_t offset = mol_read_u32(buf + 4 + 4 * i);
         uint32_t end;
         if (i + 1 < field_count)
-            end = mol_read_u32(buf + 8 + 4 * (i + 1));
+            end = mol_read_u32(buf + 4 + 4 * (i + 1));
         else
             end = full_size;
 
@@ -134,6 +149,7 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
     if (!buf || !out) return -1;
     mol_table_t t;
     int consumed = mol_table_decode(buf, buf_size, &t);
+    fprintf(stderr, "[propose_decode] consumed=%d field_count=%u\n", consumed, t.field_count);
     if (consumed < 0 || t.field_count < 5) return -1;
 
     memset(out, 0, sizeof(*out));
@@ -141,30 +157,40 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
     const uint8_t *data; uint32_t len;
 
     /* rand */
-    if (mol_decode_bytes(t.field_data[0], t.field_len[0], &data, &len) < 0) return -1;
+    int r = mol_decode_bytes(t.field_data[0], t.field_len[0], &data, &len);
+    fprintf(stderr, "[propose_decode] rand decode=%d len=%u\n", r, len);
+    if (r < 0) return -1;
     if (len > 16) return -1;
     memcpy(out->rand, data, len);
 
     /* pubkey */
-    if (mol_decode_bytes(t.field_data[1], t.field_len[1], &data, &len) < 0) return -1;
+    r = mol_decode_bytes(t.field_data[1], t.field_len[1], &data, &len);
+    fprintf(stderr, "[propose_decode] pubkey_outer decode=%d len=%u\n", r, len);
+    if (r < 0) return -1;
     if (len > 65) return -1;
     memcpy(out->pubkey, data, len);
     out->pubkey_len = len;
 
     /* exchanges */
-    if (mol_decode_bytes(t.field_data[2], t.field_len[2], &data, &len) < 0) return -1;
+    r = mol_decode_bytes(t.field_data[2], t.field_len[2], &data, &len);
+    fprintf(stderr, "[propose_decode] exchanges decode=%d len=%u str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
+    if (r < 0) return -1;
     if (len >= sizeof(out->exchanges)) return -1;
     memcpy(out->exchanges, data, len);
     out->exchanges_len = len;
 
     /* ciphers */
-    if (mol_decode_bytes(t.field_data[3], t.field_len[3], &data, &len) < 0) return -1;
+    r = mol_decode_bytes(t.field_data[3], t.field_len[3], &data, &len);
+    fprintf(stderr, "[propose_decode] ciphers decode=%d len=%u str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
+    if (r < 0) return -1;
     if (len >= sizeof(out->ciphers)) return -1;
     memcpy(out->ciphers, data, len);
     out->ciphers_len = len;
 
     /* hashes */
-    if (mol_decode_bytes(t.field_data[4], t.field_len[4], &data, &len) < 0) return -1;
+    r = mol_decode_bytes(t.field_data[4], t.field_len[4], &data, &len);
+    fprintf(stderr, "[propose_decode] hashes decode=%d len=%u str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
+    if (r < 0) return -1;
     if (len >= sizeof(out->hashes)) return -1;
     memcpy(out->hashes, data, len);
     out->hashes_len = len;
