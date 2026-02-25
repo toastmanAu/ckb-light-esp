@@ -8,5 +8,5 @@ endif()
 idf_component_register(
     SRCS "main.c"
     INCLUDE_DIRS "."
-    REQUIRES ckb_core ckb_transport ckb_protocol esp_netif nvs_flash ${NET_REQUIRES}
+    REQUIRES ckb_core ckb_transport ckb_protocol esp_netif esp_event nvs_flash ${NET_REQUIRES}
 )

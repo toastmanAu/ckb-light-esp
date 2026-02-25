@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
+#include "esp_event.h"
 #include "ckb_types.h"
 #include "ckb_protocol.h"
 
