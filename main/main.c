@@ -24,6 +24,11 @@ static const char *TAG = "ckb_main";
 
 /* ─── Target-specific networking ─────────────────────────────────── */
 
+/*
+ * Networking backend selection:
+ *   ESP32-P4                    → W5500 SPI Ethernet (no built-in WiFi)
+ *   ESP32 / S2 / S3 / C3 / C6  → native WiFi (CONFIG_SOC_WIFI_SUPPORTED)
+ */
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
 /* ── ESP32-P4: W5500 SPI Ethernet ──────────────────────────────── */
 #include "esp_eth.h"
@@ -47,8 +52,8 @@ static void net_init(void)
     /* TODO: full W5500 init via esp_eth + espressif/esp-eth-drivers */
 }
 
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-/* ── ESP32-S3: native WiFi ──────────────────────────────────────── */
+#elif defined(CONFIG_SOC_WIFI_SUPPORTED)
+/* ── WiFi targets: ESP32 / S2 / S3 / C3 / C6 / H2 etc ─────────── */
 #include "esp_wifi.h"
 #include "esp_event.h"
 
@@ -127,7 +132,7 @@ static void net_init(void)
 }
 
 #else
-#error "Unsupported target. Use: idf.py set-target esp32p4  OR  esp32s3"
+#error "Unsupported target. Supported: esp32p4 (W5500) or any WiFi-capable ESP32 variant."
 #endif
 
 /* ─── Common app entry point ─────────────────────────────────────── */
