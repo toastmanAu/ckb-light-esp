@@ -2,6 +2,7 @@
  * ckb_molecule.c — Molecule codec implementation
  */
 
+#include <inttypes.h>
 #include "ckb_molecule.h"
 #include <stdio.h>
 #include <string.h>
@@ -149,7 +150,7 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
     if (!buf || !out) return -1;
     mol_table_t t;
     int consumed = mol_table_decode(buf, buf_size, &t);
-    fprintf(stderr, "[propose_decode] consumed=%d field_count=%u\n", consumed, t.field_count);
+    fprintf(stderr, "[propose_decode] consumed=%d field_count=%"PRIu32"\n", consumed, t.field_count);
     if (consumed < 0 || t.field_count < 5) return -1;
 
     memset(out, 0, sizeof(*out));
@@ -158,14 +159,14 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
 
     /* rand */
     int r = mol_decode_bytes(t.field_data[0], t.field_len[0], &data, &len);
-    fprintf(stderr, "[propose_decode] rand decode=%d len=%u\n", r, len);
+    fprintf(stderr, "[propose_decode] rand decode=%d len=%"PRIu32"\n", r, len);
     if (r < 0) return -1;
     if (len > 16) return -1;
     memcpy(out->rand, data, len);
 
     /* pubkey */
     r = mol_decode_bytes(t.field_data[1], t.field_len[1], &data, &len);
-    fprintf(stderr, "[propose_decode] pubkey_outer decode=%d len=%u\n", r, len);
+    fprintf(stderr, "[propose_decode] pubkey_outer decode=%d len=%"PRIu32"\n", r, len);
     if (r < 0) return -1;
     if (len > 65) return -1;
     memcpy(out->pubkey, data, len);
@@ -173,7 +174,7 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
 
     /* exchanges */
     r = mol_decode_bytes(t.field_data[2], t.field_len[2], &data, &len);
-    fprintf(stderr, "[propose_decode] exchanges decode=%d len=%u str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
+    fprintf(stderr, "[propose_decode] exchanges decode=%d len=%"PRIu32" str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
     if (r < 0) return -1;
     if (len >= sizeof(out->exchanges)) return -1;
     memcpy(out->exchanges, data, len);
@@ -181,7 +182,7 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
 
     /* ciphers */
     r = mol_decode_bytes(t.field_data[3], t.field_len[3], &data, &len);
-    fprintf(stderr, "[propose_decode] ciphers decode=%d len=%u str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
+    fprintf(stderr, "[propose_decode] ciphers decode=%d len=%"PRIu32" str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
     if (r < 0) return -1;
     if (len >= sizeof(out->ciphers)) return -1;
     memcpy(out->ciphers, data, len);
@@ -189,7 +190,7 @@ int secio_propose_decode(const uint8_t *buf, uint32_t buf_size, secio_propose_t 
 
     /* hashes */
     r = mol_decode_bytes(t.field_data[4], t.field_len[4], &data, &len);
-    fprintf(stderr, "[propose_decode] hashes decode=%d len=%u str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
+    fprintf(stderr, "[propose_decode] hashes decode=%d len=%"PRIu32" str='%.*s'\n", r, len, (int)len, data ? (const char*)data : "");
     if (r < 0) return -1;
     if (len >= sizeof(out->hashes)) return -1;
     memcpy(out->hashes, data, len);
