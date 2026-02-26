@@ -1,0 +1,2 @@
+source /home/phill/ckb-light-esp/build/bootloader/gdbinit/symbols
+source /home/phill/ckb-light-esp/build/bootloader/gdbinit/connect

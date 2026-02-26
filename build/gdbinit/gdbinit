@@ -1,0 +1,2 @@
+source /home/phill/ckb-light-esp/build/gdbinit/symbols
+source /home/phill/ckb-light-esp/build/gdbinit/connect

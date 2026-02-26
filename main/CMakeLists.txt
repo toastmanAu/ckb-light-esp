@@ -1,10 +1,7 @@
 if(IDF_TARGET STREQUAL "esp32p4")
-    # ESP32-P4 has no WiFi — use W5500 SPI Ethernet
-    set(NET_REQUIRES esp_eth)
+    set(NET_REQUIRES esp_eth driver esp_http_client)
 else()
-    # All other supported targets have native WiFi
-    # (esp32, esp32s2, esp32s3, esp32c3, esp32c6, esp32h2, esp32c5 ...)
-    set(NET_REQUIRES esp_wifi)
+    set(NET_REQUIRES esp_wifi esp_http_client)
 endif()
 
 idf_component_register(
