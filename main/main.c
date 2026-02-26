@@ -28,11 +28,11 @@ static const char *TAG = "ckb_p4";
 #define ETH_SPI_HOST      SPI2_HOST
 #define ETH_SPI_SCLK_GPIO 10
 #define ETH_SPI_MOSI_GPIO 11
-#define ETH_SPI_MISO_GPIO 13
+#define ETH_SPI_MISO_GPIO 12
 #define ETH_SPI_CS_GPIO    9
 #define ETH_SPI_INT_GPIO  14
 #define ETH_SPI_RST_GPIO  15
-#define ETH_SPI_CLOCK_MHZ 25
+#define ETH_SPI_CLOCK_MHZ 20
 
 /* ── CKB node ────────────────────────────────────────────────────── */
 #define CKB_NODE_HOST    "192.168.68.87"
@@ -126,6 +126,15 @@ static void w5500_init(void)
     esp_eth_config_t eth_cfg = ETH_DEFAULT_CONFIG(mac, phy);
     esp_eth_handle_t eth_handle = NULL;
     ESP_ERROR_CHECK(esp_eth_driver_install(&eth_cfg, &eth_handle));
+
+    /* Set a valid locally-administered MAC (W5500 has no factory MAC burned in) */
+    {
+        uint8_t mac_addr[6] = {0x02, 0xCB, 0xBE, 0x50, 0x32, 0x01};
+        esp_eth_ioctl(eth_handle, ETH_CMD_S_MAC_ADDR, mac_addr);
+        ESP_LOGI(TAG, "MAC set to %02x:%02x:%02x:%02x:%02x:%02x",
+            mac_addr[0], mac_addr[1], mac_addr[2],
+            mac_addr[3], mac_addr[4], mac_addr[5]);
+    }
 
     /* Attach to TCP/IP stack */
     esp_netif_config_t netif_cfg = ESP_NETIF_DEFAULT_ETH();
@@ -282,6 +291,9 @@ static void ckb_poll_task(void *arg)
  * ───────────────────────────────────────────────────────────────── */
 void app_main(void)
 {
+    /* Wait for USB-JTAG host to enumerate — 5s is enough for Linux CDC-ACM */
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, " CKB Light Client — ESP32-P4 + W5500");
     ESP_LOGI(TAG, "========================================");
@@ -307,7 +319,7 @@ void app_main(void)
     /* Wait for DHCP IP (30s timeout) */
     ESP_LOGI(TAG, "Waiting for DHCP...");
     EventBits_t bits = xEventGroupWaitBits(s_eth_event_group,
-        ETH_GOT_IP_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
+        ETH_GOT_IP_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(60000));
 
     if (bits & ETH_GOT_IP_BIT) {
         ESP_LOGI(TAG, "Network ready — starting CKB poll");
