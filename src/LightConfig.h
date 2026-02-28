@@ -46,13 +46,26 @@
   #define LIGHT_TRANSPORT_WIFI
 
 #elif defined(LIGHT_PROFILE_LORA)
-  // LoRa transport — minimal footprint, no WiFi dependency
+  // Raw LoRa transport — point-to-point, private gateway, no duty cycle mgmt
+  // Best for: DIY off-grid setup (shed ASIC ↔ Pi gateway)
   #define LIGHT_MAX_WATCHED_SCRIPTS  2
   #define LIGHT_HEADER_CACHE_SIZE    10
   #define LIGHT_JSON_BUFFER_SIZE     4096
   #define LIGHT_NO_MERKLE
   #define LIGHT_NO_UTXO_STORE
   #define LIGHT_TRANSPORT_LORA
+
+#elif defined(LIGHT_PROFILE_LORAWAN)
+  // LoRaWAN transport — TTN/Chirpstack network, OTAA join, MAC duty cycle
+  // Best for: shipping a product (user points at TTN, no gateway setup needed)
+  // Target: TTGO T-Beam, Heltec LoRa 32, or any ESP32 + SX1276/SX1262
+  // Requires: arduino-lmic (MCCI)
+  #define LIGHT_MAX_WATCHED_SCRIPTS  2
+  #define LIGHT_HEADER_CACHE_SIZE    10
+  #define LIGHT_JSON_BUFFER_SIZE     4096  // compact binary payload, not raw JSON
+  #define LIGHT_NO_MERKLE
+  #define LIGHT_NO_UTXO_STORE
+  #define LIGHT_TRANSPORT_LORAWAN
 
 #else
   // Default: STANDARD
@@ -70,5 +83,13 @@
 #endif
 
 #if defined(LIGHT_TRANSPORT_LORA) && defined(LIGHT_TRANSPORT_WIFI)
-  #error "Cannot enable both LIGHT_TRANSPORT_LORA and LIGHT_TRANSPORT_WIFI in the same build."
+  #error "Cannot enable both LIGHT_TRANSPORT_LORA and LIGHT_TRANSPORT_WIFI."
+#endif
+
+#if defined(LIGHT_TRANSPORT_LORAWAN) && defined(LIGHT_TRANSPORT_WIFI)
+  #error "Cannot enable both LIGHT_TRANSPORT_LORAWAN and LIGHT_TRANSPORT_WIFI."
+#endif
+
+#if defined(LIGHT_TRANSPORT_LORAWAN) && defined(LIGHT_TRANSPORT_LORA)
+  #error "Cannot enable both LIGHT_TRANSPORT_LORAWAN and LIGHT_TRANSPORT_LORA."
 #endif

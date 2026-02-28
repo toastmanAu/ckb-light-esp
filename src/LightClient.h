@@ -36,6 +36,10 @@
   #include "transport/lora_transport.h"
 #endif
 
+#ifdef LIGHT_TRANSPORT_LORAWAN
+  #include "transport/lorawan_transport.h"
+#endif
+
 #ifdef LIGHT_WITH_VM
   #include "vm/ckbvm_interp.h"
 #endif
@@ -98,11 +102,15 @@ private:
 #endif
 
 #ifdef LIGHT_TRANSPORT_WIFI
-  WiFiTransport  _transport;
+  WiFiTransport    _transport;
 #endif
 
 #ifdef LIGHT_TRANSPORT_LORA
-  LoRaTransport  _transport;
+  LoRaTransport    _transport;
+#endif
+
+#ifdef LIGHT_TRANSPORT_LORAWAN
+  LoRaWANTransport _transport;
 #endif
 
   char _watchedScripts[LIGHT_MAX_WATCHED_SCRIPTS][128];

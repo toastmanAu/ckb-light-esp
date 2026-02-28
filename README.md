@@ -67,14 +67,15 @@ LightClient.h              ← main API
   LightConfig.h            ← build profiles + feature flags
 
   core/
-    header_chain.h/.cpp    ← header sync, Eaglesong PoW verify, chain tip
+    header_chain.h/.cpp    ← header sync, Eaglesong PoW verify, chain tip ✅
     block_filter.h/.cpp    ← GCS filter sync + script hash matching
     merkle.h/.cpp          ← tx inclusion proof verification (Blake2b tree)
     utxo_store.h/.cpp      ← persistent UTXO set (NVS/LittleFS)
 
   transport/
     wifi_transport.h/.cpp  ← TCP JSON-RPC to CKB node
-    lora_transport.h/.cpp  ← LoRa packet bridge (off-grid)
+    lora_transport.h/.cpp  ← raw LoRa packet bridge (point-to-point, private gateway)
+    lorawan_transport.h    ← LoRaWAN (OTAA, TTN/Chirpstack, public network)
     cellular_transport.h   ← SIM7080G/A7670 (future)
 
   vm/
@@ -99,12 +100,13 @@ It does **not** duplicate those — `CKB-ESP32` is a required `lib_dep`.
 
 Select one before your `#include`:
 
-```cpp
-#define LIGHT_PROFILE_MINIMAL    // ESP32-C6: headers + watch only (~100KB RAM)
-#define LIGHT_PROFILE_STANDARD   // ESP32-S3: + Merkle + UTXO store (~300KB RAM)
-#define LIGHT_PROFILE_FULL       // ESP32-P4: + CKB-VM (PSRAM required)
-#define LIGHT_PROFILE_LORA       // Any: LoRa transport instead of WiFi
-```
+| Profile | Target MCU | Transport | Features |
+|---|---|---|---|
+| `LIGHT_MINIMAL` | ESP32-C6 / ESP32 | WiFi | Header sync + address watch |
+| `LIGHT_STANDARD` | ESP32-S3 (PSRAM) | WiFi | + Merkle proofs + UTXO store |
+| `LIGHT_FULL` | ESP32-P4 | WiFi | + CKB-VM interpreter |
+| `LIGHT_LORA` | Any ESP32 | Raw LoRa | Off-grid, private gateway |
+| `LIGHT_LORAWAN` | TTGO T-Beam | LoRaWAN | TTN/Chirpstack, no gateway setup |
 
 Fine-grained overrides:
 
@@ -113,6 +115,38 @@ Fine-grained overrides:
 #define LIGHT_NO_UTXO_STORE      // remove persistent UTXO storage
 #define LIGHT_WITH_VM            // force-enable CKB-VM
 #define LIGHT_WITH_LORA          // add LoRa alongside WiFi
+```
+
+---
+
+## LoRa transports
+
+Two LoRa transport options, same `ITransport` interface:
+
+**Raw LoRa** (`LIGHT_PROFILE_LORA`) — point-to-point, private gateway
+- You control the protocol entirely, no duty cycle enforcement
+- Best for: off-grid mining rig, shed ASIC ↔ Pi gateway on your property
+- Hardware: TTGO T-Beam, Heltec LoRa 32, any ESP32 + SX1276/SX1262
+- Companion: `ckb-lora-bridge` (Pi/server side, planned)
+
+**LoRaWAN** (`LIGHT_PROFILE_LORAWAN`) — public/private network, OTAA join
+- Joins TTN, Chirpstack, or any compliant NS — user needs no gateway
+- Duty cycle managed by LMIC MAC layer
+- Best for: shipping a product, existing LoRaWAN infrastructure
+- Hardware: TTGO T-Beam (GPS + LoRa + 18650 — ideal standalone watcher)
+- Requires: `MCCI LoRaWAN LMIC library`
+
+```cpp
+// Raw LoRa
+#define LIGHT_PROFILE_LORA
+#include <LightClient.h>
+client.begin("192.168.1.100", 8116);  // via ckb-lora-bridge gateway
+
+// LoRaWAN
+#define LIGHT_PROFILE_LORAWAN
+#include <LightClient.h>
+LoRaWANOTAA creds = { DEV_EUI, APP_EUI, APP_KEY };
+client.begin(creds, LORAWAN_SF9);     // joins TTN/Chirpstack, syncs via backend
 ```
 
 ---
