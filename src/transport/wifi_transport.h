@@ -1,8 +1,10 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
-#include <WiFi.h>
-#include <WiFiClient.h>
+#ifndef HOST_TEST
+#  include <WiFi.h>
+#  include <WiFiClient.h>
+#endif
 
 // =============================================================================
 // wifi_transport.h — WiFi TCP transport to CKB light client node RPC
@@ -21,12 +23,35 @@
 // Architecture:
 //   CKB network (P2P) ←→ [ckb-light-client Rust node] ←→ WiFi ←→ [ESP32]
 //
-// Light client RPC methods we use:
-//   set_scripts      — register script hashes to watch
-//   get_scripts      — query current watch list
-//   get_tip_header   — latest known header
-//   get_transaction  — fetch tx by hash (with proof)
-//   send_transaction — broadcast a signed tx
+// ── RPC methods we use ────────────────────────────────────────────────────
+//
+// set_scripts      — register scripts to watch (takes full Script objects, not hashes)
+// get_scripts      — query current watch list + filtered block number per script
+// get_tip_header   — latest known header (HeaderView JSON)
+// get_header       — header by block hash
+// get_transaction  — tx by hash (committed only, returns TransactionWithStatus)
+// fetch_transaction — async tx fetch: "fetched"/"fetching"/"added"/"not_found"
+// send_transaction — broadcast a signed tx → returns tx_hash
+// get_peers        — connected peer info (use for health / sync checks)
+//
+// ── set_scripts params format ─────────────────────────────────────────────
+//
+// Takes FULL Script objects (code_hash + hash_type + args), NOT hashes:
+//   [[{ "script": { "code_hash": "0x...", "hash_type": "type", "args": "0x..." },
+//      "script_type": "lock",
+//      "block_number": "0x0" }],
+//    "partial"]   ← optional: "all" (default, replaces all) | "partial" | "delete"
+//
+// "partial" adds/updates without removing existing scripts.
+//
+// ── fetch_transaction vs get_transaction ──────────────────────────────────
+//
+// get_transaction  — returns committed tx immediately (or null if unknown)
+// fetch_transaction — async: asks P2P network, returns:
+//   { "status": "fetched",   "data": TransactionWithStatus }  ← done
+//   { "status": "fetching",  "first_sent": Uint64 }           ← in progress, retry
+//   { "status": "added",     "timestamp": Uint64 }            ← queued, retry
+//   { "status": "not_found" }                                  ← not on network
 //
 // Uses HTTP/1.1 keep-alive to reduce TCP handshake overhead.
 // Non-blocking reconnect with configurable retry interval.
@@ -34,6 +59,15 @@
 
 class WiFiTransport {
 public:
+
+  // Async fetch status (fetch_transaction return value)
+  enum FetchStatus {
+    FETCH_DONE,       // "fetched" — data is in responseBuf
+    FETCH_PENDING,    // "fetching" or "added" — retry later
+    FETCH_NOT_FOUND,  // "not_found" — tx unknown to network
+    FETCH_ERROR       // connection or parse error
+  };
+
   WiFiTransport();
 
   // Connect to CKB light client node RPC endpoint (default port 9000)
@@ -42,14 +76,9 @@ public:
   // Check if TCP connection is alive
   bool isConnected();
 
-  // Send a JSON-RPC request, receive response into caller-supplied buffer.
-  // method:          e.g. "get_tip_header"
+  // Raw JSON-RPC call. Sends method + params, receives JSON body into responseBuf.
   // params:          JSON array string, e.g. "[]" or "[\"0x1\"]"
-  // responseBuf:     caller-allocated output buffer
-  // responseBufSize: size of responseBuf (must fit full HTTP response body)
-  // timeoutMs:       read timeout (default 5s)
-  // Returns: number of bytes written to responseBuf, or -1 on error.
-  // On error, lastError() has a short description.
+  // Returns bytes written to responseBuf, or -1 on error.
   int request(
     const char* method,
     const char* params,
@@ -58,15 +87,27 @@ public:
     uint32_t    timeoutMs = 5000
   );
 
-  // Convenience: set_scripts — register script hashes with the light client node.
-  // scriptHashesHex: array of "0x..." hex strings (32-byte hashes)
-  // count:           number of hashes
-  // blockNumber:     filter start block (light client won't report TXs before this)
-  // Returns true on RPC success.
-  bool setScripts(const char** scriptHashesHex, uint8_t count, uint64_t blockNumber = 0);
+  // set_scripts: register a lock script with the light client.
+  // codeHashHex:  "0x" + 64 hex chars (e.g. secp256k1: 0x9bd7e06f...)
+  // hashType:     "type" or "data"
+  // argsHex:      "0x" + hex-encoded lock args (e.g. 20-byte pubkey hash)
+  // blockNumber:  filter start — light client won't report TXs before this
+  // Uses "partial" command — adds without replacing existing scripts.
+  bool setScripts(const char* codeHashHex, const char* hashType,
+                  const char* argsHex, uint64_t blockNumber = 0);
 
-  // Convenience: get_tip_header — fills blockNumber with current tip.
+  // get_tip_header: fills *blockNumber with current chain tip.
   bool getTipHeader(uint64_t* blockNumber);
+
+  // fetch_transaction: async fetch via P2P network.
+  // On FETCH_DONE, responseBuf contains the TransactionWithStatus JSON.
+  // On FETCH_PENDING, retry after a short delay.
+  FetchStatus fetchTransaction(const char* txHashHex,
+                               char* responseBuf, size_t responseBufSize);
+
+  // get_peers: returns number of connected peers, or -1 on error.
+  // peer count == 0 means not syncing — useful for health checks.
+  int getPeerCount();
 
   // Disconnect and free TCP resources
   void disconnect();
@@ -84,4 +125,14 @@ private:
   bool _reconnect();
   int  _buildRequest(const char* method, const char* params,
                      char* out, size_t outSize);
+
+#ifdef HOST_TEST
+public:
+  // Test hook: preload a canned HTTP response into _client
+  void _testLoad(const char* s) { _client.load(s); }
+  // Test hook: expose _buildRequest for inspection
+  int  _testBuildRequest(const char* m, const char* p, char* o, size_t n) {
+    return _buildRequest(m, p, o, n);
+  }
+#endif
 };
