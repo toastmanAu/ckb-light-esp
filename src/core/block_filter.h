@@ -140,7 +140,11 @@ public:
     uint8_t*       out32
   );
 
+#ifdef HOST_TEST
+public:
+#else
 private:
+#endif
   // Watched scripts
   uint8_t  _scriptHashes[LIGHT_MAX_WATCHED_SCRIPTS][32];
   uint64_t _scriptStartBlock[LIGHT_MAX_WATCHED_SCRIPTS];
