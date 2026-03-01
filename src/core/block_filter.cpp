@@ -23,7 +23,7 @@
 #else
   #include <Arduino.h>
   // CKB-ESP32 Blake2b for computeScriptHash
-  #include "../../lib/CKB-ESP32/src/ckb_blake2b.h"
+  #include <ckb_blake2b.h>
 #endif
 
 #include "block_filter.h"

@@ -14,10 +14,12 @@
 #include <stdio.h>
 
 #ifndef HOST_TEST
+#if defined(LIGHT_PROFILE_LORA) || defined(LIGHT_PROFILE_LORAWAN)
 #include <RadioLib.h>
 static SX1276* _radioInst = nullptr;
 static volatile bool _rxFlag = false;
 static void IRAM_ATTR _onRxDone() { _rxFlag = true; }
+#endif
 #endif
 
 // ── millis_compat() ───────────────────────────────────────────────────────────
@@ -29,6 +31,7 @@ static uint32_t millis_compat() {
     return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 #else
+#include <Arduino.h>
 static uint32_t millis_compat() { return (uint32_t)millis(); }
 #endif
 
@@ -48,7 +51,7 @@ bool LoRaTransport::begin() {
 #ifdef HOST_TEST
     _connected = true;
     return true;
-#else
+#elif defined(LIGHT_PROFILE_LORA) || defined(LIGHT_PROFILE_LORAWAN)
     Module* mod = new Module(_pinNSS, _pinDIO0, _pinRST);
     _radioInst = new SX1276(mod);
     int state = _radioInst->begin(
@@ -61,6 +64,8 @@ bool LoRaTransport::begin() {
     _radioInst->startReceive();
     _connected = true;
     return true;
+#else
+    return false; // LoRa not enabled for this profile
 #endif
 }
 
@@ -102,7 +107,7 @@ bool LoRaTransport::_sendPacket(const LoRaPacket& pkt) {
         _loopbackLen += wireLen;
     }
     return true;
-#else
+#elif defined(LIGHT_PROFILE_LORA) || defined(LIGHT_PROFILE_LORAWAN)
     _radioInst->standby();
     int state = _radioInst->transmit(buf, wireLen);
     _radioInst->startReceive();
@@ -111,6 +116,8 @@ bool LoRaTransport::_sendPacket(const LoRaPacket& pkt) {
         return false;
     }
     return true;
+#else
+    return false;
 #endif
 }
 
@@ -129,7 +136,7 @@ bool LoRaTransport::_recvPacket(LoRaPacket& out, uint32_t timeoutMs) {
     memmove(src, src + consumed, *len - consumed);
     *len -= consumed;
     return true;
-#else
+#elif defined(LIGHT_PROFILE_LORA) || defined(LIGHT_PROFILE_LORAWAN)
     uint32_t deadline = millis_compat() + timeoutMs;
     while (millis_compat() < deadline) {
         if (_rxFlag) {
@@ -143,6 +150,9 @@ bool LoRaTransport::_recvPacket(LoRaPacket& out, uint32_t timeoutMs) {
         delay(2);
     }
     snprintf(_lastError, sizeof(_lastError), "RX timeout %ums", timeoutMs);
+    return false;
+#else
+    (void)out; (void)timeoutMs;
     return false;
 #endif
 }

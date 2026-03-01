@@ -23,13 +23,16 @@
 //   ]
 // =============================================================================
 
+#ifdef HOST_TEST
+// Host build shims (not needed on device — Arduino.h provides these)
 #ifndef IRAM_ATTR
-#define IRAM_ATTR  // host build shim
+#define IRAM_ATTR
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdlib.h>   // atoi, strtol
+#include <stdlib.h>
 #include <time.h>
 #ifndef WY_ARDUINO_SHIMS_DEFINED
 #define WY_ARDUINO_SHIMS_DEFINED
@@ -40,13 +43,13 @@ static uint32_t millis() {
 }
 static void delay(int) {}
 #endif
-#endif
+#endif // HOST_TEST
 
 #ifndef LIGHT_JSON_BUFFER_SIZE
 #define LIGHT_JSON_BUFFER_SIZE 2048
 #endif
 #ifndef HOST_TEST
-#  include "../../CKB-ESP32/src/ckb_blake2b.h"
+#  include <ckb_blake2b.h>
 #  include "../LightConfig.h"
 #endif
 #include "wifi_transport.h"

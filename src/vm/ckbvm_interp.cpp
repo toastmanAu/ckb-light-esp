@@ -560,16 +560,37 @@ int CKBVMInterp::_step(const CKBVMContext& ctx) {
         // RV64M multiply
         case 0|(0x01<<3): _regs[rd] = rs1v * rs2v; break;                                // MUL
         case 1|(0x01<<3): { // MULH (signed*signed, high 64 bits)
-            __int128 r = (__int128)(int64_t)rs1v * (__int128)(int64_t)rs2v;
-            _regs[rd] = (uint64_t)(r >> 64); break;
+            // MULH: use emulated 128-bit
+            int64_t _a=(int64_t)rs1v,_b=(int64_t)rs2v;
+            uint64_t _alo=(uint32_t)_a,_blo=(uint32_t)_b;
+            int64_t _ahi=_a>>32,_bhi=_b>>32;
+            uint64_t _lolo=_alo*_blo;
+            int64_t _lohi=(int64_t)_alo*_bhi,_hilo=_ahi*(int64_t)_blo,_hihi=_ahi*_bhi;
+            uint64_t _mid=(_lolo>>32)+(uint32_t)_lohi+(uint32_t)_hilo;
+            int64_t r = (_lohi>>32)+(_hilo>>32)+((int64_t)(_mid>>32))+_hihi;
+            _regs[rd] = (uint64_t)r; break;
         }
         case 2|(0x01<<3): { // MULHSU
-            __int128 r = (__int128)(int64_t)rs1v * (__uint128_t)rs2v;
-            _regs[rd] = (uint64_t)(r >> 64); break;
+            // MULHSU: signed*unsigned high 64 bits
+            int64_t _sa=(int64_t)rs1v; uint64_t _ub=rs2v;
+            uint64_t _alo2=(uint32_t)(uint64_t)_sa,_blo2=(uint32_t)_ub;
+            int64_t _ahi2=_sa>>32; uint64_t _bhi2=_ub>>32;
+            uint64_t _ll2=_alo2*_blo2;
+            int64_t _lh2=(int64_t)_alo2*(int64_t)_bhi2; uint64_t _hl2=(uint64_t)_ahi2*_blo2;
+            int64_t _hh2=_ahi2*(int64_t)_bhi2;
+            uint64_t _mid2=(_ll2>>32)+(uint32_t)_lh2+(uint32_t)_hl2;
+            int64_t r = (_lh2>>32)+(int64_t)(_hl2>>32)+(int64_t)(_mid2>>32)+_hh2;
+            _regs[rd] = (uint64_t)r; break;
         }
         case 3|(0x01<<3): { // MULHU
-            __uint128_t r = (__uint128_t)rs1v * (__uint128_t)rs2v;
-            _regs[rd] = (uint64_t)(r >> 64); break;
+            // MULHU: unsigned*unsigned high 64 bits
+            uint64_t _alo3=(uint32_t)rs1v,_blo3=(uint32_t)rs2v;
+            uint64_t _ahi3=rs1v>>32,_bhi3=rs2v>>32;
+            uint64_t _ll3=_alo3*_blo3;
+            uint64_t _lh3=_alo3*_bhi3,_hl3=_ahi3*_blo3,_hh3=_ahi3*_bhi3;
+            uint64_t _mid3=(_ll3>>32)+(uint32_t)_lh3+(uint32_t)_hl3;
+            uint64_t r = (_lh3>>32)+(_hl3>>32)+(_mid3>>32)+_hh3;
+            _regs[rd] = (uint64_t)r; break;
         }
         case 4|(0x01<<3): // DIV
             if (!rs2v) { _regs[rd] = UINT64_MAX; }
