@@ -123,6 +123,28 @@ public:
   FetchStatus fetchTransaction(const char* txHashHex,
                                char* responseBuf, size_t responseBufSize);
 
+  // get_cells_capacity: returns total capacity (shannons) of live cells for a
+  // lock script. Fastest way to get a balance — single RPC, no filter sync needed.
+  // Returns UINT64_MAX on error. Set *outShannons to result.
+  bool getCellsCapacity(const char* codeHashHex, const char* hashType,
+                        const char* argsHex, uint64_t* outShannons);
+
+  // get_scripts: returns currently watched scripts as JSON into responseBuf.
+  // Useful for recovering watched script state after reboot.
+  bool getScripts(char* responseBuf, size_t responseBufSize);
+
+  // get_cells: fills responseBuf with JSON array of live cells for a script.
+  // limit: max cells to return (default 10). after_cursor: pagination (pass
+  // NULL for first page, then last seen out_point "tx_hash:index" for next).
+  bool getCells(const char* codeHashHex, const char* hashType,
+                const char* argsHex,
+                char* responseBuf, size_t responseBufSize,
+                uint32_t limit = 10, const char* afterCursor = nullptr);
+
+  // estimate_cycles: estimate script execution cycles for a tx.
+  // Returns UINT64_MAX on error.
+  uint64_t estimateCycles(const char* txJson);
+
   // get_peers: returns number of connected peers, or -1 on error.
   // peer count == 0 means not syncing — useful for health checks.
   int getPeerCount();

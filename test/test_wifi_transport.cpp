@@ -253,7 +253,14 @@ static void test_error_response_detected() {
     CHECK("RPC error: lastError set",            strlen(t.lastError()) > 0);
 }
 
+// Forward declarations for new tests
+static void test_get_cells_capacity();
+static void test_get_scripts();
+static void test_get_cells();
+
 // ── main ──────────────────────────────────────────────────────────────────────
+
+
 
 int main() {
     printf("=== ckb-light-esp wifi_transport tests ===\n\n");
@@ -277,9 +284,106 @@ int main() {
     printf("\n--- getPeerCount ---\n");
     test_get_peer_count();
 
+    printf("\n--- getCellsCapacity ---\n");
+    test_get_cells_capacity();
+
+    printf("\n--- getScripts ---\n");
+    test_get_scripts();
+
+    printf("\n--- getCells ---\n");
+    test_get_cells();
+
     printf("\n--- error handling ---\n");
     test_error_response_detected();
 
     printf("\n=== Results: %d passed, %d failed ===\n", pass, fail);
     return fail > 0 ? 1 : 0;
+}
+
+// ── getCellsCapacity tests ─────────────────────────────────────────────────────
+
+static void test_get_cells_capacity() {
+    // Normal response: capacity in hex shannons
+    WiFiTransport t;
+    t._testLoad(
+        "HTTP/1.1 200 OK\r\nContent-Length: 61\r\n\r\n"
+        "{\"id\":1,\"jsonrpc\":\"2.0\",\"result\":{\"capacity\":\"0x174876e800\"}}"
+    );
+
+    uint64_t shannons = 0;
+    bool ok = t.getCellsCapacity(
+        "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+        "type", "0xabcdef1234", &shannons);
+
+    CHECK("getCellsCapacity: returns true",    ok == true);
+    CHECK("getCellsCapacity: 1000 CKB = 100000000000 shannons",
+          shannons == 100000000000ULL);  // 0x174876e800 = 100 CKB in shannons
+
+    // Zero capacity
+    WiFiTransport t2;
+    t2._testLoad(
+        "HTTP/1.1 200 OK\r\nContent-Length: 52\r\n\r\n"
+        "{\"id\":1,\"jsonrpc\":\"2.0\",\"result\":{\"capacity\":\"0x0\"}}"
+    );
+    uint64_t z = 1;
+    bool ok2 = t2.getCellsCapacity("0x9bd7e06f", "type", "0xaa", &z);
+    CHECK("getCellsCapacity: zero capacity ok", ok2 == true);
+    CHECK("getCellsCapacity: zero value",       z == 0);
+
+    // Error response
+    WiFiTransport t3;
+    t3._testLoad(
+        "HTTP/1.1 200 OK\r\nContent-Length: 64\r\n\r\n"
+        "{\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"err\"}}"
+    );
+    uint64_t e = 1;
+    bool ok3 = t3.getCellsCapacity("0x9bd7e06f", "type", "0xaa", &e);
+    CHECK("getCellsCapacity: error response → false", ok3 == false);
+}
+
+// ── getScripts tests ───────────────────────────────────────────────────────────
+
+static void test_get_scripts() {
+    WiFiTransport t;
+    const char* body =
+        "{\"id\":1,\"jsonrpc\":\"2.0\",\"result\":[{\"script\":{\"code_hash\":"
+        "\"0x9bd7e06f\",\"hash_type\":\"type\",\"args\":\"0xaabbcc\"},"
+        "\"script_type\":\"lock\",\"block_number\":\"0x0\"}]}";
+    char hdr[64]; snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\n\r\n", strlen(body));
+    char full[512]; snprintf(full, sizeof(full), "%s%s", hdr, body);
+    t._testLoad(full);
+
+    char resp[512];
+    bool ok = t.getScripts(resp, sizeof(resp));
+    CHECK("getScripts: returns true",       ok == true);
+    CHECK("getScripts: result has script",  strstr(resp, "0x9bd7e06f") != nullptr);
+}
+
+// ── getCells tests ─────────────────────────────────────────────────────────────
+
+static void test_get_cells() {
+    WiFiTransport t;
+    const char* body =
+        "{\"id\":1,\"jsonrpc\":\"2.0\",\"result\":{\"last_cursor\":\"0xabcd\","
+        "\"objects\":[{\"out_point\":{\"tx_hash\":\"0xdeadbeef\",\"index\":\"0x0\"},"
+        "\"capacity\":\"0x174876e800\"}]}}";
+    char hdr[64]; snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\n\r\n", strlen(body));
+    char full[512]; snprintf(full, sizeof(full), "%s%s", hdr, body);
+    t._testLoad(full);
+
+    char resp[512];
+    bool ok = t.getCells("0x9bd7e06f", "type", "0xaabb", resp, sizeof(resp));
+    CHECK("getCells: returns true",            ok == true);
+    CHECK("getCells: result has out_point",    strstr(resp, "out_point") != nullptr);
+    CHECK("getCells: result has capacity",     strstr(resp, "0x174876e800") != nullptr);
+
+    // Pagination: with afterCursor
+    WiFiTransport t2;
+    t2._testLoad(full);
+    char resp2[512];
+    bool ok2 = t2.getCells("0x9bd7e06f", "type", "0xaabb", resp2, sizeof(resp2),
+                            10, "0xdeadbeef:0");
+    CHECK("getCells: pagination call ok", ok2 == true);
 }

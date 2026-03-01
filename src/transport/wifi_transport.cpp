@@ -366,3 +366,91 @@ int WiFiTransport::getPeerCount() {
     }
     return count;
 }
+
+// ─── getCellsCapacity ─────────────────────────────────────────────────────────
+// Single-call balance query via get_cells_capacity RPC.
+// Returns total capacity of all live cells for the given lock script.
+// Much faster than filter sync — answers from light node's indexed state.
+
+bool WiFiTransport::getCellsCapacity(const char* codeHashHex, const char* hashType,
+                                     const char* argsHex, uint64_t* outShannons) {
+    if (!outShannons) return false;
+    *outShannons = 0;
+
+    char params[320];
+    snprintf(params, sizeof(params),
+        "[{\"script\":{\"code_hash\":\"%s\",\"hash_type\":\"%s\",\"args\":\"%s\"},"
+        "\"script_type\":\"lock\"}]",
+        codeHashHex, hashType, argsHex);
+
+    char resp[256];
+    int len = request("get_cells_capacity", params, resp, sizeof(resp));
+    if (len < 0) return false;
+
+    // result is {"capacity":"0x..."} — parse hex capacity
+    const char* cap = strstr(resp, "\"capacity\":");
+    if (!cap) {
+        snprintf(_lastError, sizeof(_lastError), "getCellsCapacity: no capacity field");
+        return false;
+    }
+    cap += 11;
+    while (*cap == ' ' || *cap == '"') cap++;
+    if (*cap == '0' && *(cap+1) == 'x') cap += 2;
+    *outShannons = (uint64_t)strtoull(cap, nullptr, 16);
+    return true;
+}
+
+// ─── getScripts ───────────────────────────────────────────────────────────────
+// Retrieve currently watched scripts from the light node.
+// Useful to verify or restore watch state after reboot.
+
+bool WiFiTransport::getScripts(char* responseBuf, size_t responseBufSize) {
+    int len = request("get_scripts", "[]", responseBuf, responseBufSize);
+    return len > 0;
+}
+
+// ─── getCells ─────────────────────────────────────────────────────────────────
+// Fetch live cells for a lock script. Returns JSON array of cells.
+// Use limit to cap results, afterCursor for pagination (pass nullptr for first page).
+
+bool WiFiTransport::getCells(const char* codeHashHex, const char* hashType,
+                             const char* argsHex,
+                             char* responseBuf, size_t responseBufSize,
+                             uint32_t limit, const char* afterCursor) {
+    char params[512];
+    if (afterCursor && *afterCursor) {
+        snprintf(params, sizeof(params),
+            "[{\"script\":{\"code_hash\":\"%s\",\"hash_type\":\"%s\",\"args\":\"%s\"},"
+            "\"script_type\":\"lock\",\"filter\":null,\"limit\":\"0x%x\","
+            "\"cursor\":\"%s\"}]",
+            codeHashHex, hashType, argsHex, limit, afterCursor);
+    } else {
+        snprintf(params, sizeof(params),
+            "[{\"script\":{\"code_hash\":\"%s\",\"hash_type\":\"%s\",\"args\":\"%s\"},"
+            "\"script_type\":\"lock\",\"filter\":null,\"limit\":\"0x%x\"}]",
+            codeHashHex, hashType, argsHex, limit);
+    }
+
+    int len = request("get_cells", params, responseBuf, responseBufSize);
+    return len > 0;
+}
+
+// ─── estimateCycles ───────────────────────────────────────────────────────────
+// Estimate script execution cycles for a transaction.
+// Returns UINT64_MAX on error.
+
+uint64_t WiFiTransport::estimateCycles(const char* txJson) {
+    char params[64 + strlen(txJson)];
+    snprintf(params, sizeof(params), "[%s]", txJson);
+
+    char resp[128];
+    int len = request("estimate_cycles", params, resp, sizeof(resp));
+    if (len < 0) return UINT64_MAX;
+
+    const char* cycles = strstr(resp, "\"cycles\":");
+    if (!cycles) return UINT64_MAX;
+    cycles += 9;
+    while (*cycles == ' ' || *cycles == '"') cycles++;
+    if (*cycles == '0' && *(cycles+1) == 'x') cycles += 2;
+    return (uint64_t)strtoull(cycles, nullptr, 16);
+}
