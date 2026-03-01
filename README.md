@@ -163,20 +163,32 @@ Uses [RadioLib](https://github.com/jgromes/RadioLib) — supports SX1276, SX1278
 
 ## Status
 
-**v0.1 — headers and scaffolding complete. Implementations in progress.**
+**v0.2 — fully implemented, 206/206 host tests passing.**
+
+All modules implemented, host-tested, and verified against Nervos mainnet.
 
 - [x] Library structure + build profiles
-- [x] Header chain (interface)
-- [x] GCS block filter (interface)
-- [x] Merkle proof verification (interface)
-- [x] UTXO store (interface)
-- [x] WiFi transport (interface)
-- [x] LoRa transport (interface)
-- [x] Native lock verifiers (interface)
-- [x] CKB-VM interpreter (interface)
-- [ ] Implementations (in progress)
-- [ ] Integration tests
-- [ ] First mainnet verified tx
+- [x] `header_chain` — Eaglesong PoW verify, parent linkage, 6/6 tests
+- [x] `merkle` — CBMT verify + transactions_root merge, 11/11 tests
+- [x] `block_filter` — GCS filter sync + script hash matching, 27/27 tests
+- [x] `wifi_transport` — HTTP/1.1 keep-alive, chunked parsing, full RPC, 30/30 tests
+- [x] `LightClient` — sync state machine (IDLE→CONNECTING→SYNCING→WATCHING), 25/25 tests
+- [x] `native_locks` — secp256k1/multisig/ACP without VM, 37/37 tests
+- [x] `ckbvm_interp` — RV64IMC interpreter, ELF64 loader, 7 syscalls, 24/24 tests
+- [x] `lora_transport` — binary framing, fragmentation, ACK/NACK, 17/17 tests
+- [x] Host test suite — `bash test/run_tests.sh` — 206 tests, ~9s on aarch64
+- [ ] Hardware integration tests (needs LoRa radio + CKB node)
+- [ ] First LoRa field test with `ckb-lora-bridge`
+
+### Host test suite
+
+```bash
+cd ckb-light-esp
+bash test/run_tests.sh
+# → 206/206 passing
+```
+
+No Arduino SDK required — runs on bare Linux (aarch64/x86_64) via POSIX sockets.
 
 ---
 
