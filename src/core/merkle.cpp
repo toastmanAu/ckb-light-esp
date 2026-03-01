@@ -35,7 +35,7 @@
 // =============================================================================
 
 #include "merkle.h"
-#include "../../CKB-ESP32/src/ckb_blake2b.h"
+#include <ckb_blake2b.h>
 #include <string.h>
 
 #ifndef LIGHT_NO_MERKLE

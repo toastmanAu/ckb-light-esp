@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Generated** | 2026-03-01 14:28:34 |
+| **Generated** | 2026-03-01 16:06:24 |
 | **Platform** | `Linux 5.10.0-1012-rockchip aarch64` |
 | **Compiler** | `g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0` |
-| **Commit** | `5003c63` |
-| **Total time** | 9290ms |
+| **Commit** | `e983120` |
+| **Total time** | 8920ms |
 
 ## Summary
 
@@ -14,22 +14,22 @@
 
 | Suite | Passed | Failed | Time | Status |
 |---|---:|---:|---:|---|
-| `header_chain` | 6 | 0 | 602ms | 🟢 pass |
-| `merkle` | 11 | 0 | 279ms | 🟢 pass |
-| `block_filter` | 27 | 0 | 310ms | 🟢 pass |
-| `wifi_transport` | 30 | 0 | 441ms | 🟢 pass |
-| `light_client` | 25 | 0 | 542ms | 🟢 pass |
-| `helpers` | 29 | 0 | 511ms | 🟢 pass |
-| `native_locks` | 37 | 0 | 360ms | 🟢 pass |
-| `ckbvm_interp` | 24 | 0 | 5865ms | 🟢 pass |
-| `lora_transport` | 17 | 0 | 259ms | 🟢 pass |
-| **TOTAL** | **206** | **0** | **9290ms** | ✅ **ALL PASS** |
+| `header_chain` | 6 | 0 | 561ms | 🟢 pass |
+| `merkle` | 11 | 0 | 288ms | 🟢 pass |
+| `block_filter` | 27 | 0 | 289ms | 🟢 pass |
+| `wifi_transport` | 30 | 0 | 448ms | 🟢 pass |
+| `light_client` | 25 | 0 | 518ms | 🟢 pass |
+| `helpers` | 29 | 0 | 489ms | 🟢 pass |
+| `native_locks` | 37 | 0 | 341ms | 🟢 pass |
+| `ckbvm_interp` | 24 | 0 | 5608ms | 🟢 pass |
+| `lora_transport` | 17 | 0 | 250ms | 🟢 pass |
+| **TOTAL** | **206** | **0** | **8920ms** | ✅ **ALL PASS** |
 
 ## Per-Suite Details
 
 ### `header_chain`
 
-**6 passed · 0 failed · 602ms**
+**6 passed · 0 failed · 561ms**
 
 **Sections:**
 - block hash verification
@@ -49,7 +49,7 @@
 
 ### `merkle`
 
-**11 passed · 0 failed · 279ms**
+**11 passed · 0 failed · 288ms**
 
 **Sections:**
 - parseProof
@@ -76,7 +76,7 @@
 
 ### `block_filter`
 
-**27 passed · 0 failed · 310ms**
+**27 passed · 0 failed · 289ms**
 
 **Sections:**
 - [1] SipHash-2-4 (k0=0, k1=0)
@@ -122,7 +122,7 @@
 
 ### `wifi_transport`
 
-**30 passed · 0 failed · 441ms**
+**30 passed · 0 failed · 448ms**
 
 **Sections:**
 - HTTP request building
@@ -171,7 +171,7 @@
 
 ### `light_client`
 
-**25 passed · 0 failed · 542ms**
+**25 passed · 0 failed · 518ms**
 
 **Sections:**
 - [1] begin() + state transitions
@@ -217,7 +217,7 @@
 
 ### `helpers`
 
-**29 passed · 0 failed · 511ms**
+**29 passed · 0 failed · 489ms**
 
 **Sections:**
 - [1] blake2b_real.h — real CKB Blake2b-256
@@ -261,7 +261,7 @@
 
 ### `native_locks`
 
-**37 passed · 0 failed · 360ms**
+**37 passed · 0 failed · 341ms**
 
 **Sections:**
 - [1] identifyLock() — code hash recognition
@@ -317,7 +317,7 @@
 
 ### `ckbvm_interp`
 
-**24 passed · 0 failed · 5865ms**
+**24 passed · 0 failed · 5608ms**
 
 **Sections:**
 - [1] ELF loading
@@ -363,7 +363,7 @@
 
 ### `lora_transport`
 
-**17 passed · 0 failed · 259ms**
+**17 passed · 0 failed · 250ms**
 
 **Sections:**
 - [1] begin() and isConnected()
