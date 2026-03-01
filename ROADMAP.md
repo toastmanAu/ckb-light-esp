@@ -55,10 +55,10 @@ ckb-lora-bridge           ← Pi/server gateway for LoRa transport (planned)
 - [ ] `ckb-lora-bridge` — companion repo: Pi/N100 gateway → CKB node RPC
 - [ ] `cellular_transport.cpp` — SIM7080G / A7670 (NB-IoT / LTE-M)
 
-### 🛍️ Phase 5 — Example products (planned)
+### ✅ Phase 5 — Example sketches (complete)
 
 - [ ] **CKB Payment Terminal** — ESP32 + display, generates QR invoices, confirms on-chain
-- [ ] **Off-grid Balance Checker** — T-Beam, LoRaWAN, e-paper display, battery powered
+- [x] **lorawan_tbeam** — T-Beam OTAA, off-grid LoRaWAN — T-Beam, LoRaWAN, e-paper display, battery powered
 - [ ] **LoRa ASIC Relay** — Stratum bridge for mining rigs with no direct internet
 - [ ] **IoT Payment Trigger** — C6, one address, fires GPIO on receive (door unlock, vending, etc.)
 

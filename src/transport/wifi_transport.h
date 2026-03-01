@@ -4,7 +4,25 @@
 #ifndef HOST_TEST
 #  include <WiFi.h>
 #  include <WiFiClient.h>
-#endif
+#else
+// HOST_TEST: minimal WiFiClient stub so wifi_transport.cpp compiles standalone.
+// Guard with WY_WIFI_CLIENT_DEFINED so test files can supply their own stub.
+#ifndef WY_WIFI_CLIENT_DEFINED
+#define WY_WIFI_CLIENT_DEFINED
+#include <string>
+struct WiFiClient {
+    std::string _buf; int _pos = 0; bool _alive = false;
+    void load(const char* s) { _buf += s; _alive = true; }
+    void reset() { _buf.clear(); _pos = 0; _alive = false; }
+    bool connected() const { return _alive && _pos < (int)_buf.size(); }
+    bool available()  const { return _pos < (int)_buf.size(); }
+    int  read()  { return _alive && _pos < (int)_buf.size() ? (uint8_t)_buf[_pos++] : -1; }
+    size_t write(const uint8_t*, size_t n) { return n; }
+    void stop() { _alive = false; }
+    bool connect(const char*, uint16_t) { return false; }
+};
+#endif // WY_WIFI_CLIENT_DEFINED
+#endif // !HOST_TEST
 
 // =============================================================================
 // wifi_transport.h — WiFi TCP transport to CKB light client node RPC

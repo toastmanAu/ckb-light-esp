@@ -29,6 +29,17 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>   // atoi, strtol
+#include <time.h>
+#ifndef WY_ARDUINO_SHIMS_DEFINED
+#define WY_ARDUINO_SHIMS_DEFINED
+static uint32_t millis() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
+static void delay(int) {}
+#endif
 #endif
 
 #ifndef LIGHT_JSON_BUFFER_SIZE

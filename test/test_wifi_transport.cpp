@@ -33,10 +33,12 @@ static int pass = 0, fail = 0;
 
 // ── Arduino shims ─────────────────────────────────────────────────────────────
 static uint32_t _fake_millis = 0;
+#define WY_ARDUINO_SHIMS_DEFINED
 uint32_t millis() { return _fake_millis; }
 void delay(int ms) { (void)ms; }
 
 // Minimal WiFiClient shim — feeds a canned response string
+#define WY_WIFI_CLIENT_DEFINED
 struct WiFiClient {
     const char* _buf = nullptr;
     int         _pos = 0;

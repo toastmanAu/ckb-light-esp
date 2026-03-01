@@ -31,7 +31,13 @@
 
 #include "header_chain.h"
 #include "eaglesong.h"
-#include <ArduinoJson.h>
+#ifndef HOST_TEST
+#  include <ArduinoJson.h>
+#else
+// HOST_TEST shims
+#  include "../../test/ckb_json_shim.h"
+#  include "../../CKB-ESP32/src/ckb_blake2b.h"
+#endif
 #include <string.h>
 
 // ─── Utility helpers ──────────────────────────────────────────────────────────

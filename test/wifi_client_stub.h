@@ -9,7 +9,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-// Arduino shims
+// Arduino shims — guarded so they can be included multiple times
+#define WY_ARDUINO_SHIMS_DEFINED
+#define WY_WIFI_CLIENT_DEFINED
 static uint32_t _fake_millis_base = 0;
 uint32_t millis() {
     struct timespec ts;
