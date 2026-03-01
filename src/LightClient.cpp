@@ -495,3 +495,124 @@ void LightClient::_stepWatching() {
         }
     }
 }
+
+// ─── getBalance (code_hash + args) ───────────────────────────────────────────
+
+bool LightClient::getBalance(const char* codeHash, const char* args,
+                             uint64_t* outShannons, const char* hashType) {
+    if (!outShannons) return false;
+    *outShannons = 0;
+    return _transport.getCellsCapacity(codeHash, hashType, args, outShannons);
+}
+
+// ─── getBalance (CKB bech32 address string) ──────────────────────────────────
+// Minimal bech32 decode to extract lock script fields from a ckb1q... address.
+// Supports all three CKB address formats (short, full, full-data).
+
+bool LightClient::getBalance(const char* ckbAddress, uint64_t* outShannons) {
+    if (!outShannons || !ckbAddress) return false;
+    *outShannons = 0;
+
+    // Bech32 charset for 5-bit decoding
+    static const int8_t CHARSET[128] = {
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        15,-1,10,17,21,20,26,30, 7, 5,-1,-1,-1,-1,-1,-1,
+        -1,29,-1,24,13,25, 9, 8,23,-1,18,22,31,27,19,-1,
+         1, 0, 3,16,11,28,12,14, 6, 4, 2,-1,-1,-1,-1,-1,
+        -1,29,-1,24,13,25, 9, 8,23,-1,18,22,31,27,19,-1,
+         1, 0, 3,16,11,28,12,14, 6, 4, 2,-1,-1,-1,-1,-1,
+    };
+
+    // Find separator '1' (first occurrence after HRP)
+    const char* sep = strchr(ckbAddress, '1');
+    if (!sep) return false;
+    size_t hrpLen = sep - ckbAddress;
+    const char* data5 = sep + 1;
+    size_t data5Len = strlen(data5);
+    if (data5Len < 8) return false;  // need at least checksum + 1 byte
+
+    // Decode 5-bit values (skip last 6 = checksum)
+    size_t payloadLen5 = data5Len - 6;
+    uint8_t d5[128]; size_t d5n = 0;
+    for (size_t i = 0; i < payloadLen5 && d5n < sizeof(d5); i++) {
+        unsigned char c = (unsigned char)data5[i];
+        if (c >= 128 || CHARSET[c] < 0) return false;
+        d5[d5n++] = (uint8_t)CHARSET[c];
+    }
+
+    // Convert 5-bit groups to 8-bit bytes
+    uint8_t payload[100]; size_t plen = 0;
+    uint32_t acc = 0; int bits = 0;
+    for (size_t i = 0; i < d5n; i++) {
+        acc = (acc << 5) | d5[i];
+        bits += 5;
+        if (bits >= 8) { bits -= 8; payload[plen++] = (acc >> bits) & 0xFF; }
+        if (plen >= sizeof(payload)) return false;
+    }
+
+    // Parse payload by format byte
+    char codeHash[67] = {0}; char hashType[8] = "type"; char args[130] = {0};
+
+    if (payload[0] == 0x01 && plen >= 2) {
+        // Short format: code_hash_index table
+        static const struct { const char* hash; const char* ht; } tbl[] = {
+            {"0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8","type"},
+            {"0xe35098a9e3ff48b8aab5ca4e2e61ef0f3db07c0c7e2e7b7d4e7ff8f03f5c6a8a","data"},
+            {"0x5c5069eb0857efc65e1bca0c07df34c31663b3622fd3876c876320fc9634e2a8","type"},
+        };
+        uint8_t idx = payload[1];
+        if (idx >= 3) return false;
+        snprintf(codeHash, sizeof(codeHash), "%s", tbl[idx].hash);
+        snprintf(hashType, sizeof(hashType), "%s", tbl[idx].ht);
+        size_t ab = plen - 2;
+        strcpy(args, "0x");
+        for (size_t i = 0; i < ab && i < 64; i++)
+            snprintf(args + 2 + i*2, 3, "%02x", payload[2+i]);
+
+    } else if ((payload[0] == 0x00 || payload[0] == 0x02) && plen >= 33) {
+        // Full format: code_hash(32) | hash_type(1) | args
+        strcpy(codeHash, "0x");
+        for (int i = 1; i <= 32; i++)
+            snprintf(codeHash + 2 + (i-1)*2, 3, "%02x", payload[i]);
+        if (payload[0] == 0x00 && plen >= 34) {
+            uint8_t ht = payload[33];
+            if      (ht == 0x00) snprintf(hashType, sizeof(hashType), "%s", "data");
+            else if (ht == 0x01) snprintf(hashType, sizeof(hashType), "%s", "type");
+            else if (ht == 0x02) snprintf(hashType, sizeof(hashType), "%s", "data1");
+            else if (ht == 0x04) snprintf(hashType, sizeof(hashType), "%s", "data2");
+            size_t ab = plen - 34;
+            strcpy(args, "0x");
+            for (size_t i = 0; i < ab && i < 64; i++)
+                snprintf(args + 2 + i*2, 3, "%02x", payload[34+i]);
+        } else {
+            snprintf(hashType, sizeof(hashType), "%s", "data");
+            size_t ab = plen - 33;
+            strcpy(args, "0x");
+            for (size_t i = 0; i < ab && i < 64; i++)
+                snprintf(args + 2 + i*2, 3, "%02x", payload[33+i]);
+        }
+    } else {
+        return false;
+    }
+
+    return _transport.getCellsCapacity(codeHash, hashType, args, outShannons);
+}
+
+// ─── formatCKB ────────────────────────────────────────────────────────────────
+
+char* LightClient::formatCKB(uint64_t shannons, char* buf, size_t bufSize) {
+    uint64_t ckb      = shannons / 100000000ULL;
+    uint64_t fraction = shannons % 100000000ULL;
+    if (fraction == 0) {
+        snprintf(buf, bufSize, "%llu CKB", (unsigned long long)ckb);
+    } else {
+        // Strip trailing zeros from fraction
+        char frac[16]; snprintf(frac, sizeof(frac), "%08llu", (unsigned long long)fraction);
+        int flen = 8;
+        while (flen > 1 && frac[flen-1] == '0') frac[--flen] = '\0';
+        snprintf(buf, bufSize, "%llu.%s CKB", (unsigned long long)ckb, frac);
+    }
+    return buf;
+}

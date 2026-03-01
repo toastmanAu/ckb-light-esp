@@ -102,6 +102,21 @@ public:
   // Peer count from node (0 = node not synced, -1 = error)
   int peerCount() const { return _peerCount; }
 
+  // Get balance (shannons) for a watched lock script by code_hash + args.
+  // Calls get_cells_capacity on the light node — instant, no filter sync needed.
+  // Returns false on error; *outShannons set to 0 on failure.
+  bool getBalance(const char* codeHash, const char* args,
+                  uint64_t* outShannons,
+                  const char* hashType = "type");
+
+  // Get balance for a full CKB bech32 address string (ckb1q...).
+  // Decodes address to lock script internally, then calls get_cells_capacity.
+  bool getBalance(const char* ckbAddress, uint64_t* outShannons);
+
+  // Format shannons as a CKB string with decimal (e.g. "142.5 CKB").
+  // Writes to buf, returns buf. Safe for use in Serial.print / display.
+  static char* formatCKB(uint64_t shannons, char* buf, size_t bufSize);
+
 private:
   LightSyncState _state;
   HeaderChain    _headers;

@@ -321,6 +321,73 @@ void testDevchain() {
 // ══════════════════════════════════════════════════════════════════════════════
 // main
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ─── getBalance tests ─────────────────────────────────────────────────────────
+
+static void testGetBalance() {
+    // getBalance(codeHash, args) — delegates to getCellsCapacity
+    {
+        LightClient lc;
+        const char* body = "{\"id\":1,\"jsonrpc\":\"2.0\",\"result\":{\"capacity\":\"0x174876e800\"}}";
+        char hdr[128]; snprintf(hdr, sizeof(hdr),
+            "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\n\r\n", strlen(body));
+        char full[256]; snprintf(full, sizeof(full), "%s%s", hdr, body);
+        lc._transportRef()._testLoad(full);
+
+        uint64_t shannons = 0;
+        bool ok = lc.getBalance(
+            "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+            "0xabcdef1234", &shannons);
+        CHECK(ok == true,                    "getBalance(codeHash,args): ok");
+        CHECK(shannons == 100000000000ULL,   "getBalance(codeHash,args): 1000 CKB");
+    }
+
+    // getBalance(address) — bech32 decode + getCellsCapacity
+    {
+        LightClient lc;
+        const char* body = "{\"id\":1,\"jsonrpc\":\"2.0\",\"result\":{\"capacity\":\"0x5af3107a4000\"}}";
+        char hdr[128]; snprintf(hdr, sizeof(hdr),
+            "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\n\r\n", strlen(body));
+        char full[256]; snprintf(full, sizeof(full), "%s%s", hdr, body);
+        lc._transportRef()._testLoad(full);
+
+        uint64_t shannons = 0;
+        bool ok = lc.getBalance("ckb1qyq829u0x32fchlfe5dqc4awh5q70h0eyj0q2zdh7f", &shannons);
+        CHECK(ok == true,       "getBalance(addr): ok");
+        CHECK(shannons > 0,     "getBalance(addr): non-zero");
+    }
+
+    // null guard
+    {
+        LightClient lc;
+        uint64_t sh = 0;
+        CHECK(lc.getBalance((const char*)nullptr, &sh) == false,
+              "getBalance(null addr): returns false");
+    }
+}
+
+static void testFormatCKB() {
+    char buf[32];
+
+    LightClient::formatCKB(100000000ULL, buf, sizeof(buf));
+    CHECK(strcmp(buf, "1 CKB") == 0,       "formatCKB: 1 CKB");
+
+    LightClient::formatCKB(100000000000ULL, buf, sizeof(buf));
+    CHECK(strcmp(buf, "1000 CKB") == 0,    "formatCKB: 1000 CKB");
+
+    LightClient::formatCKB(150000000ULL, buf, sizeof(buf));
+    CHECK(strcmp(buf, "1.5 CKB") == 0,     "formatCKB: 1.5 CKB");
+
+    LightClient::formatCKB(142500000ULL, buf, sizeof(buf));
+    CHECK(strcmp(buf, "1.425 CKB") == 0,   "formatCKB: 1.425 CKB");
+
+    LightClient::formatCKB(0ULL, buf, sizeof(buf));
+    CHECK(strcmp(buf, "0 CKB") == 0,       "formatCKB: 0 CKB");
+
+    LightClient::formatCKB(1ULL, buf, sizeof(buf));
+    CHECK(strstr(buf, "CKB") != nullptr,   "formatCKB: 1 shannon has CKB");
+}
+
 int main() {
     printf("========================================\n");
     printf("  LightClient.cpp host tests\n");
@@ -335,6 +402,8 @@ int main() {
     testSyncIdle();
     testConnectTransition();
     testDevchain();
+    testGetBalance();
+    testFormatCKB();
 
     printf("\n========================================\n");
     printf("  Results: %d passed, %d failed\n", g_pass, g_fail);
