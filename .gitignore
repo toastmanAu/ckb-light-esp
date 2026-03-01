@@ -1,0 +1,8 @@
+.pio/
+test/test_*
+!test/test_*.cpp
+!test/test_*.sh
+!test/run_tests.sh
+*.o
+*.a
+*.map
