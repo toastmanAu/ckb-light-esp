@@ -51,6 +51,8 @@
 #endif
 
 #include "LightClient.h"
+#include "core/ckb_hex.h"
+#include "core/ckb_json.h"
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 #define CONNECT_RETRY_MS      5000   // retry connection after failure
@@ -62,68 +64,10 @@
 #define PEER_CHECK_INTERVAL   30000  // check peer count this often
 
 // ── JSON field extraction helpers ────────────────────────────────────────────
-// Minimal JSON string/number extractors — avoids full JSON parser dependency.
-// All operate on null-terminated C strings.
-
-// Find value of "key": "value" → copies value into out (without quotes)
-// Returns true if found.
-static bool jsonGetStr(const char* json, const char* key, char* out, size_t outLen) {
-    char search[80];
-    snprintf(search, sizeof(search), "\"%s\"", key);
-    const char* pos = strstr(json, search);
-    if (!pos) return false;
-    pos += strlen(search);
-    while (*pos == ' ' || *pos == ':' || *pos == ' ') pos++;
-    if (*pos != '"') return false;
-    pos++;
-    size_t i = 0;
-    while (*pos && *pos != '"' && i < outLen - 1) out[i++] = *pos++;
-    out[i] = '\0';
-    return i > 0;
-}
-
-// Find "key": 0x... hex number → parse as uint64_t
-static bool jsonGetHexU64(const char* json, const char* key, uint64_t* out) {
-    char buf[24];
-    if (!jsonGetStr(json, key, buf, sizeof(buf))) return false;
-    if (buf[0]=='0' && buf[1]=='x') {
-        *out = (uint64_t)strtoull(buf + 2, nullptr, 16);
-        return true;
-    }
-    return false;
-}
-
-// Find value of "result": <value> as raw token (number, string, object, array)
-// Returns pointer into json at start of result value, sets *len.
-static const char* jsonGetResult(const char* json, size_t* len) {
-    const char* pos = strstr(json, "\"result\"");
-    if (!pos) return nullptr;
-    pos += 8;
-    while (*pos == ' ' || *pos == ':') pos++;
-    if (!*pos || *pos == 'n') return nullptr; // null
-    const char* start = pos;
-    // Walk to end of value (handle objects/arrays/strings/atoms)
-    int depth = 0;
-    bool inStr = false;
-    const char* p = start;
-    while (*p) {
-        if (inStr) {
-            if (*p == '\\') { p++; }
-            else if (*p == '"') inStr = false;
-        } else {
-            if (*p == '"') inStr = true;
-            else if (*p == '{' || *p == '[') depth++;
-            else if (*p == '}' || *p == ']') {
-                if (depth == 0) break;
-                depth--;
-                if (depth == 0) { p++; break; }
-            } else if (depth == 0 && (*p == ',' || *p == '}')) break;
-        }
-        p++;
-    }
-    if (len) *len = (size_t)(p - start);
-    return start;
-}
+// Now provided by core/ckb_json.h — kept as thin aliases for readability.
+#define jsonGetStr(j,k,o,n)    ckbJsonGetStr(j,k,o,n)
+#define jsonGetHexU64(j,k,o)   ckbJsonGetHexU64(j,k,o)
+#define jsonGetResult(j,l)     ckbJsonGetResult(j,l)
 
 // ── millis() shim ─────────────────────────────────────────────────────────────
 uint32_t LightClient::_ms() {
@@ -175,22 +119,8 @@ bool LightClient::watchScript(const char* codeHash, const char* args,
     uint8_t codeHashBytes[32], argsBytes[128];
     size_t  argsLen = 0;
 
-    const char* ch = codeHash;
-    if (ch[0]=='0' && ch[1]=='x') ch += 2;
-    for (int i = 0; i < 32; i++) {
-        unsigned v = 0;
-        sscanf(ch + i*2, "%02x", &v);
-        codeHashBytes[i] = (uint8_t)v;
-    }
-    const char* a = args;
-    if (a[0]=='0' && a[1]=='x') a += 2;
-    argsLen = strlen(a) / 2;
-    if (argsLen > sizeof(argsBytes)) argsLen = sizeof(argsBytes);
-    for (size_t i = 0; i < argsLen; i++) {
-        unsigned v = 0;
-        sscanf(a + i*2, "%02x", &v);
-        argsBytes[i] = (uint8_t)v;
-    }
+    if (!ckbHexDecodeN(_watchCodeHash[_watchedCount-1], codeHashBytes, 32)) return false;
+    argsLen = ckbHexDecode(_watchArgs[_watchedCount-1], argsBytes, sizeof(argsBytes));
 
     uint8_t scriptHash[32];
     BlockFilter::computeScriptHash(
@@ -457,23 +387,10 @@ void LightClient::_stepSyncFilters() {
 // ── _applyFilter() ───────────────────────────────────────────────────────────
 // Decode hex filter data and run it through BlockFilter::testFilter()
 void LightClient::_applyFilter(const char* filterHex, uint64_t blockNumber) {
-    const char* p = filterHex;
-    if (p[0]=='0' && p[1]=='x') p += 2;
-
-    size_t hexLen = strlen(p);
-    if (hexLen == 0 || hexLen > 2048) return;
-
-    // Decode hex → bytes
+    if (!filterHex) return;
     static uint8_t filterBuf[1024];
-    size_t byteLen = hexLen / 2;
-    if (byteLen > sizeof(filterBuf)) byteLen = sizeof(filterBuf);
-
-    for (size_t i = 0; i < byteLen; i++) {
-        unsigned v = 0;
-        sscanf(p + i*2, "%02x", &v);
-        filterBuf[i] = (uint8_t)v;
-    }
-
+    size_t byteLen = ckbHexDecode(filterHex, filterBuf, sizeof(filterBuf));
+    if (byteLen == 0) return;
     _filter.testFilter(blockNumber, filterBuf, byteLen);
 }
 
