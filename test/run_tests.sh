@@ -52,6 +52,7 @@ SUITES=(
   "native_locks|test/test_nl|g++ %B% %T%/test_native_locks.cpp src/vm/native_locks.cpp -lsecp256k1 -o %T%/test_nl"
   "ckbvm_interp|test/test_vm|g++ %B% -DLIGHT_WITH_VM %T%/test_ckbvm_interp.cpp src/vm/ckbvm_interp.cpp -o %T%/test_vm"
   "lora_transport|test/test_lora|g++ %B% %T%/test_lora_transport.cpp src/transport/lora_transport.cpp -o %T%/test_lora"
+  "bitchat|test/test_bitchat|g++ %B% -Isrc/bitchat %T%/test_bitchat.cpp -o %T%/test_bitchat"
 )
 
 elapsed_ms() { echo $(( ($(date +%s%N) - $1) / 1000000 )); }
