@@ -1,11 +1,21 @@
 // test_light_client.cpp — host-side tests for LightClient.cpp
-// Build (single-TU, same pattern as test_wifi_transport.cpp):
+//
+// Two build modes:
+//
+// 1. Stub mode (fast, no network — default):
 //   g++ -DHOST_TEST -std=c++11 -Itest -Isrc \
-//       test/test_light_client.cpp \
-//       -o test/test_lc && test/test_lc
+//       test/test_light_client.cpp -o test/test_lc && test/test_lc
+//
+// 2. Live mode (real TCP to devchain at 192.168.68.93:8114):
+//   g++ -DHOST_TEST -DLIVE_TEST -std=c++11 -Itest -Isrc \
+//       test/test_light_client.cpp -o test/test_lc_live && test/test_lc_live
 
 #define HOST_TEST
-#include "wifi_client_stub.h"  // WiFiClient + millis/delay shims (before any includes)
+#ifdef LIVE_TEST
+#  include "posix_socket_client.h"   // real POSIX TCP sockets
+#else
+#  include "wifi_client_stub.h"      // canned response stub
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -232,6 +242,11 @@ void testSyncIdle() {
 void testConnectTransition() {
     printf("\n[8] CONNECTING → SYNCING_CHECKPOINTS via mock transport\n");
 
+#ifdef LIVE_TEST
+    printf("  SKIP: mock transport not used in LIVE_TEST mode\n");
+    return;
+#endif
+
     LightClient lc;
     lc.begin("192.168.68.93", 8114);
     lc.watchScript(
@@ -267,12 +282,40 @@ void testConnectTransition() {
 // Test 9: Devchain smoke test — live connection (skipped if node unreachable)
 // ══════════════════════════════════════════════════════════════════════════════
 void testDevchain() {
-    printf("\n[9] Devchain live smoke test (integration only — requires real socket)\n");
-    printf("  SKIP: WiFiClient stub doesn't do real TCP — run on device or use curl\n");
-    printf("  INFO: devchain at http://192.168.68.93:8114\n");
-    printf("  INFO: verify manually: curl -s -X POST -H 'Content-Type: application/json' \\\n");
-    printf("        -d '{\"jsonrpc\":\"2.0\",\"method\":\"get_tip_block_number\",\"params\":[],\"id\":1}' \\\n");
-    printf("        http://192.168.68.93:8114/\n");
+    printf("\n[9] Devchain live smoke test (192.168.68.93:8114)\n");
+
+#ifndef LIVE_TEST
+    printf("  SKIP: stub mode — rebuild with -DLIVE_TEST for real TCP\n");
+    printf("  CMD:  g++ -DHOST_TEST -DLIVE_TEST -std=c++11 -Itest -Isrc \\\n");
+    printf("            test/test_light_client.cpp -o test/test_lc_live\n");
+    return;
+#else
+    // Test against the devchain full node (port 8114).
+    // Note: set_scripts is a light client node method (port 9000) — not supported here.
+    // So we test the transport layer directly: connect + get_tip_header.
+    WiFiTransport t;
+    bool connected = t.connect("192.168.68.93", 8114);
+    CHECK(connected, "TCP connect to devchain:8114");
+
+    if (!connected) {
+        printf("  INFO: start devchain: ssh opi3b-armbian 'bash ~/ckb-devchain/start.sh'\n");
+        return;
+    }
+
+    uint64_t tip = 0;
+    bool gotTip = t.getTipHeader(&tip);
+    CHECK(gotTip, "get_tip_header RPC over real TCP");
+    CHECK(tip > 0, "tip block > 0");
+    printf("  INFO: devchain tip = %llu (0x%llx)\n",
+           (unsigned long long)tip, (unsigned long long)tip);
+
+    // Verify peer count RPC also works
+    int peers = t.getPeerCount();
+    CHECK(peers >= 0, "get_peers RPC returns non-negative");
+    printf("  INFO: peer count = %d\n", peers);
+
+    t.disconnect();
+#endif
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
