@@ -49,12 +49,19 @@
 #define SCRIPT_TYPE_TYPE  1
 
 // Sync state machine states
+// Order matches RFC 045 client operation requirements:
+//   1. Connect + register scripts
+//   2. SYNCING_CHECKPOINTS — fetch filter hash checkpoints (every 2000 blocks)
+//   3. SYNCING_HASHES      — fetch per-block filter hashes between checkpoints
+//   4. SYNCING_FILTERS     — fetch + test actual GCS filters against scripts
+//   5. WATCHING            — tip in sync, polling for new blocks
 typedef enum {
   LIGHT_STATE_IDLE,
   LIGHT_STATE_CONNECTING,
-  LIGHT_STATE_SYNCING_HEADERS,
+  LIGHT_STATE_SYNCING_CHECKPOINTS,
+  LIGHT_STATE_SYNCING_HASHES,
   LIGHT_STATE_SYNCING_FILTERS,
-  LIGHT_STATE_READY,
+  LIGHT_STATE_WATCHING,
   LIGHT_STATE_ERROR
 } LightSyncState;
 
@@ -67,7 +74,9 @@ public:
 
   // Register a script to watch (code_hash + args + type)
   // Returns false if LIGHT_MAX_WATCHED_SCRIPTS exceeded
-  bool watchScript(const char* codeHash, const char* args, uint8_t scriptType = SCRIPT_TYPE_LOCK);
+  bool watchScript(const char* codeHash, const char* args,
+                   uint8_t scriptType = SCRIPT_TYPE_LOCK,
+                   uint64_t startBlock = 0);
 
   // Call from loop() — drives the sync state machine
   // Non-blocking: returns quickly, does one step per call
@@ -75,22 +84,23 @@ public:
 
   // Current sync state
   LightSyncState state() const { return _state; }
+  const char* stateStr() const;
 
-  // Chain tip (latest verified header)
-  uint64_t tipBlockNumber() const;
-  const char* tipBlockHash() const;
+  // Chain tip (latest verified header from node)
+  uint64_t tipBlockNumber() const { return _tipBlockNumber; }
+  const char* tipBlockHash() const { return _tipBlockHash; }
+
+  // Filter sync progress (0 when not yet syncing)
+  uint64_t filterSyncBlock() const { return _filterSyncBlock; }
 
   // Has a transaction been confirmed for any watched script?
-  // Poll this after sync() returns LIGHT_STATE_READY
   bool hasPendingEvents() const;
 
-  // Retrieve next pending event (tx hash + block number)
-  // Returns false if no events queued
+  // Pop next pending event. Returns false if none queued.
   bool nextEvent(char* txHashOut, uint64_t* blockNumOut);
 
-  // Optional: verify tx inclusion via Merkle proof
-  // (no-op if LIGHT_NO_MERKLE defined)
-  bool verifyInclusion(const char* txHash, const char* blockHash);
+  // Peer count from node (0 = node not synced, -1 = error)
+  int peerCount() const { return _peerCount; }
 
 private:
   LightSyncState _state;
@@ -102,22 +112,61 @@ private:
 #endif
 
 #ifdef LIGHT_TRANSPORT_WIFI
-  WiFiTransport    _transport;
+  WiFiTransport  _transport;
 #endif
-
 #ifdef LIGHT_TRANSPORT_LORA
-  LoRaTransport    _transport;
+  LoRaTransport  _transport;
 #endif
-
 #ifdef LIGHT_TRANSPORT_LORAWAN
   LoRaWANTransport _transport;
 #endif
 
-  char _watchedScripts[LIGHT_MAX_WATCHED_SCRIPTS][128];
-  uint8_t _watchedTypes[LIGHT_MAX_WATCHED_SCRIPTS];
+  // Watched script registration (raw strings for set_scripts RPC)
+  char    _watchCodeHash[LIGHT_MAX_WATCHED_SCRIPTS][67]; // "0x" + 64 + null
+  char    _watchArgs[LIGHT_MAX_WATCHED_SCRIPTS][128];
+  uint8_t _watchType[LIGHT_MAX_WATCHED_SCRIPTS];         // SCRIPT_TYPE_LOCK/TYPE
+  uint64_t _watchStartBlock[LIGHT_MAX_WATCHED_SCRIPTS];
   uint8_t _watchedCount;
 
+  // Node endpoint
+  char     _host[64];
+  uint16_t _port;
+
+  // Tip state
+  uint64_t _tipBlockNumber;
+  char     _tipBlockHash[67];
+
+  // Filter sync cursor
+  uint64_t _filterSyncBlock;   // next block to fetch filter for
+  uint64_t _lastAskMs;         // millis() of last filter request (anti-spam)
+
+  // Peer count (cached from last check)
+  int _peerCount;
+
+  // Shared JSON response buffer
+  char _jsonBuf[LIGHT_JSON_BUFFER_SIZE];
+
+  // State steps
   void _stepConnect();
-  void _stepSyncHeaders();
+  void _stepSyncCheckpoints();
+  void _stepSyncHashes();
   void _stepSyncFilters();
+  void _stepWatching();
+
+  // Helpers
+  bool _registerScripts();
+  bool _updateTip();
+  bool _processMatchedBlock(uint64_t blockNumber);
+  void _applyFilter(const char* filterHex, uint64_t blockNumber);
+
+  // millis() shim (host-test safe)
+  static uint32_t _ms();
+
+#ifdef HOST_TEST
+public:
+  BlockFilter&   _filterRef()    { return _filter; }
+  WiFiTransport& _transportRef() { return _transport; }
+  void           _applyFilterPub(const char* h, uint64_t b) { _applyFilter(h, b); }
+private:
+#endif
 };
