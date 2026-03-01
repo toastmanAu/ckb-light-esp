@@ -47,7 +47,7 @@ void setup() {
 void loop() {
   client.sync();
 
-  if (client.state() == LIGHT_STATE_READY && client.hasPendingEvents()) {
+  if (client.state() == LIGHT_STATE_WATCHING && client.hasPendingEvents()) {
     char txHash[67];
     uint64_t blockNum;
 
