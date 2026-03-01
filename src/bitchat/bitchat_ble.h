@@ -26,13 +26,13 @@
 //   - NimBLE-Arduino library (h2zero/NimBLE-Arduino)
 //   - bitchat_mesh.h (relay engine)
 //
-// Host test: BLE is Arduino-only. Compile guard: #ifndef HOST_TEST
+// Host test: BLE is Arduino-only. Compile guard: #if defined(BITCHAT_BLE_ENABLED) && !defined(HOST_TEST)
 
 #pragma once
 
 #include "bitchat_mesh.h"
 
-#ifndef HOST_TEST
+#if defined(BITCHAT_BLE_ENABLED) && !defined(HOST_TEST)
 
 #include <NimBLEDevice.h>
 #include <NimBLEServer.h>
@@ -150,4 +150,4 @@ private:
 // BitchatBLE is not copyable. Use a single global instance.
 // extern BitchatBLE g_ble;   // declare in your .ino
 
-#endif // HOST_TEST
+#endif // BITCHAT_BLE_ENABLED && !HOST_TEST

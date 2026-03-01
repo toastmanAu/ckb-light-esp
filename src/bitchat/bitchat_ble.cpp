@@ -7,7 +7,7 @@
 
 #include "bitchat_ble.h"
 
-#ifndef HOST_TEST
+#if defined(BITCHAT_BLE_ENABLED) && !defined(HOST_TEST)
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
 
@@ -362,4 +362,4 @@ void BitchatBLE::onScanEnd(NimBLEScanResults results) {
     _scanning = false;
 }
 
-#endif // HOST_TEST
+#endif // BITCHAT_BLE_ENABLED && !HOST_TEST

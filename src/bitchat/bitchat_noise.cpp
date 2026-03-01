@@ -8,7 +8,7 @@
 //   HMAC-SHA256/HKDF:  built on sha2.c
 
 #include "bitchat_noise.h"
-#include "x25519.h"  // X25519: libsodium (HOST_TEST) or portable C (device)
+#include "curve25519/x25519.h"  // X25519: libsodium (HOST_TEST) or portable C (device)
 
 #ifdef HOST_TEST
   #include <stdio.h>
@@ -21,9 +21,9 @@
 #endif
 
 extern "C" {
-  #include "sha2.h"         // sha256_Raw() — trezor_crypto
-  #include "rfc7539.h"      // rfc7539_init/auth/finish — chacha20poly1305/
-  #include "chacha20poly1305.h"
+  #include "trezor_crypto/sha2.h"         // sha256_Raw() — trezor_crypto
+  #include "chacha20poly1305/rfc7539.h"      // rfc7539_init/auth/finish — chacha20poly1305/
+  #include "chacha20poly1305/chacha20poly1305.h"
 }
 
 // ─── Nonce encoding ───────────────────────────────────────────────────────────
