@@ -34,12 +34,14 @@ ckb-lora-bridge           ← Pi/server gateway for LoRa transport (planned)
 - [x] Transport stubs: WiFi, raw LoRa, LoRaWAN, cellular
 - [x] Host test suite — all verified against mainnet
 
-### 🔧 Phase 2 — Transport + sync loop (in progress)
+### ✅ Phase 2 — Transport + sync loop (complete)
 
-- [ ] `wifi_transport.cpp` — TCP JSON-RPC to CKB light client node (port 9000)
-- [ ] `LightClient.cpp` — sync state machine (connect → headers → filters → ready)
-- [ ] `block_filter.cpp` — GCS filter sync, SipHash-2-4, checkpoint-based initial sync
-- [ ] `utxo_store.cpp` — persistent UTXO set (NVS/LittleFS)
+- [x] `wifi_transport.cpp` — HTTP/1.1 keep-alive, chunked transfer, full RPC surface
+- [x] `block_filter.cpp` — GCS filter sync, SipHash-2-4, checkpoint-based initial sync (27/27)
+- [x] `LightClient.cpp` — sync state machine: IDLE → CONNECTING → SYNCING_CHECKPOINTS → SYNCING_HASHES → SYNCING_FILTERS → WATCHING (25/25)
+- [x] Host test infrastructure: stub mode + live POSIX TCP mode
+- [x] Shared helpers: `ckb_hex.h`, `ckb_json.h`, `ckb_rpc_fixtures.h`, `blake2b_real.h`, `molecule_builder.h`
+- [ ] `utxo_store.cpp` — persistent UTXO set (NVS/LittleFS) — deferred to Phase 3
 
 ### 📋 Phase 3 — Script execution (planned)
 
