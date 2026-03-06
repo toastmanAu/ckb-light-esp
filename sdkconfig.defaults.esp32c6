@@ -1,0 +1,19 @@
+# sdkconfig.defaults.esp32c6
+# CKB Light Client — ESP32-C6 (native WiFi 6, RISC-V)
+CONFIG_IDF_TARGET="esp32c6"
+
+# Native WiFi backend
+CONFIG_CKB_WIFI_NATIVE=y
+
+# WiFi
+CONFIG_ESP_WIFI_ENABLED=y
+CONFIG_ESP32C6_DEFAULT_CPU_FREQ_160=y
+
+# Stack sizes — C6 is single-core RISC-V, keep tasks lean
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Disable P4-specific features
+CONFIG_SPIRAM=n
+
+# Log level
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
